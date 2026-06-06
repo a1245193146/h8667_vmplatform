@@ -53,4 +53,11 @@ urlpatterns = [
         views.api_vm_disks,
         name='api_vm_disks'
     ),
+
+    # 退出登录
+    path(
+        'logout/',
+        views.logout,
+        name='logout'
+    ),
 ]

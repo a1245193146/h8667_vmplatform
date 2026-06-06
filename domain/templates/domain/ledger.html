@@ -1,0 +1,52 @@
+{% extends "resize/base.html" %}
+
+{% block title %}域名台账 - 信息化运维平台{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-header bg-white py-3">
+        <div class="d-flex flex-column flex-md-row justify-content-between gap-3 align-items-md-center">
+            <h4 class="mb-0 text-primary fw-bold">域名管理台账</h4>
+            <input type="search" id="ledgerSearch" class="form-control" style="max-width: 320px;" placeholder="搜索域名 / IP / 申请人...">
+        </div>
+    </div>
+    <div class="card-body p-0 table-responsive">
+        <table class="table table-hover table-striped mb-0 align-middle" id="ledgerTable">
+            <thead class="table-light">
+                <tr>
+                    <th>序号</th><th>域名</th><th>目标IP</th><th>端口</th><th>申请人</th><th>配置时间</th><th>DNS</th><th>SSL</th><th>代理</th><th>负载均衡</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for task in tasks %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td class="fw-medium">{{ task.domain }}</td>
+                    <td>{{ task.target_ip }}</td>
+                    <td>{{ task.target_port }}</td>
+                    <td>{{ task.applicant }}</td>
+                    <td class="text-muted small">{{ task.finish_time|default:task.create_time|date:"Y-m-d H:i" }}</td>
+                    <td>{% if task.dns_status %}<span class="text-success fw-bold">✓</span>{% else %}<span class="text-danger fw-bold">✗</span>{% endif %}</td>
+                    <td>{% if task.ssl_status %}<span class="text-success fw-bold">✓</span>{% else %}<span class="text-danger fw-bold">✗</span>{% endif %}</td>
+                    <td>{% if task.nginx_proxy_status %}<span class="text-success fw-bold">✓</span>{% else %}<span class="text-danger fw-bold">✗</span>{% endif %}</td>
+                    <td>{% if task.nginx_upstream_status %}<span class="text-success fw-bold">✓</span>{% else %}<span class="text-danger fw-bold">✗</span>{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="10" class="text-center py-5 text-muted">暂无成功配置的域名</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.getElementById('ledgerSearch').addEventListener('input', function () {
+        const keyword = this.value.toLowerCase();
+        document.querySelectorAll('#ledgerTable tbody tr').forEach(function (row) {
+            row.style.display = row.innerText.toLowerCase().includes(keyword) ? '' : 'none';
+        });
+    });
+</script>
+{% endblock %}

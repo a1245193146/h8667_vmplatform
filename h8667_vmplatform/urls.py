@@ -16,12 +16,13 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
-
-from django.contrib import admin
-from django.urls import path
 from django.urls import include
+from resize.views import sso_logout_init
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('resize.urls')),
+    path('domain/', include('domain.urls')),
+    # SSO 退出初始化（用户点击退出）
+    path('logout/', sso_logout_init, name='sso_logout_init'),
 ]

@@ -19,9 +19,20 @@ def sso_context(request):
     count = 0
 
     if admin:
-        count = DiskResizeTask.objects.filter(
-            approval_status='pending'
-        ).count()
+        try:
+            count = DiskResizeTask.objects.filter(
+                approval_status='pending'
+            ).count()
+            try:
+                from domain.models import DomainTask
+                count += DomainTask.objects.filter(
+                    approval_status='pending'
+                ).count()
+            except Exception:
+                pass
+        except Exception:
+            # 如果数据库连接有问题，返回0
+            count = 0
 
     return {
         'is_authenticated': True,

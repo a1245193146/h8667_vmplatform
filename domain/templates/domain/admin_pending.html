@@ -1,0 +1,53 @@
+{% extends "resize/base.html" %}
+
+{% block title %}域名审批 - 信息化运维平台{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-danger border-opacity-25">
+    <div class="card-header bg-white py-3">
+        <h4 class="mb-0 text-danger fw-bold">域名配置待审批申请</h4>
+    </div>
+    <div class="card-body p-0 table-responsive">
+        <table class="table table-striped table-hover mb-0 align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>申请人</th><th>域名</th><th>目标IP</th><th>端口</th><th style="max-width: 250px;">申请原因</th><th>申请时间</th><th class="text-end px-4">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for task in tasks %}
+                <tr>
+                    <td class="fw-medium">{{ task.applicant }}</td>
+                    <td>{{ task.domain }}</td>
+                    <td>{{ task.target_ip }}</td>
+                    <td>{{ task.target_port }}</td>
+                    <td class="text-truncate text-muted" style="max-width: 250px;" title="{{ task.reason }}">{{ task.reason }}</td>
+                    <td class="text-muted small">{{ task.create_time|date:"Y-m-d H:i" }}</td>
+                    <td class="text-end px-4">
+                        <form method="POST" action="{% url 'domain:admin_approve' task.id %}" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-success rounded-pill px-3 shadow-sm" onclick="return confirm('确认批准此域名配置申请？后台将立即开始执行。');">批准</button>
+                        </form>
+                        <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 ms-1" data-bs-toggle="modal" data-bs-target="#domainRejectModal{{ task.id }}">驳回</button>
+                        <div class="modal fade" id="domainRejectModal{{ task.id }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog text-start">
+                                <div class="modal-content shadow">
+                                    <form method="POST" action="{% url 'domain:admin_reject' task.id %}">
+                                        {% csrf_token %}
+                                        <div class="modal-header border-bottom-0"><h5 class="modal-title text-danger fw-bold">填写驳回原因</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                                        <div class="modal-body bg-light"><textarea class="form-control" name="reject_reason" rows="4" required placeholder="请详细说明驳回原因，申请人将能看到此内容..."></textarea></div>
+                                        <div class="modal-footer border-top-0"><button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">取消</button><button type="submit" class="btn btn-danger rounded-pill px-4">确认驳回</button></div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="text-center py-5 text-muted fs-5"><div class="my-4"><span class="d-block mb-2 fs-1">🎉</span>暂无域名待审批申请</div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

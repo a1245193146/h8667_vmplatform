@@ -17,8 +17,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # 延迟导入 hpjx_sso，避免在设置加载前访问 settings
 # import hpjx.hpjx_sso
 
-CELERY_BROKER_URL = 'redis:///'
-CELERY_RESULT_BACKEND = 'redis:///'
+CELERY_BROKER_URL = 'redis://@x.x.20.143:6379/0'
+CELERY_RESULT_BACKEND = 'redis://@x.x.20.143:6379/1'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
@@ -34,18 +34,27 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
+# CSRF trusted origins for SSO integration
+CSRF_TRUSTED_ORIGINS = [
+    'https://vmplatform.XXXX.com',
+    'https://sso.XXXX.com',
+    'http://vmplatform.XXXX.com',
+    'https://dev.sso.XXXX.com',
+]
+
 VCENTER_CONFIG = {
-    'HOST': "192.168.x.xx",
+    'HOST': "x.x.2.40",
     'USERNAME': "administrator@vsphere.local",
-    'PASSWORD': "xxxxxx",
+    'PASSWORD': "NettrixXXXX.",
 }
 ANSIBLE_CONFIG = {
 
-    'HOST': '10.2.xx.xx',
-    'USERNAME': 'root',
-    'PASSWORD': 'rxxxxx',
+    'HOST': 'x.x.20.226',
+    'USERNAME': 'xxxx',
+    'PASSWORD': 'xxxxxxxx',
     'WORKDIR': '/etc/ansible',
     'PLAYBOOK': 'playbooks/windows_extend.yml',
+    'windows_list': 'inventory.d/windows_dynamic.ini',
     'INVENTORY': 'hosts',
 }
 # Application definition
@@ -58,6 +67,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'resize',
+    'domain',
 ]
 
 MIDDLEWARE = [
@@ -159,6 +169,8 @@ STATIC_URL = 'static/'
 # # 那么SSO_IS_DEBUG = IS_DEBUG 即可，在开发模式的配置中添加DEV_XXX相关的配置，发布配置中使用SSO_XXXX即可
 
 # SSO_USER_INFO_TYPE = 'detail'  # 'detail' | 'simple' 标记跟SSO获取用户信息时，返回简单数据还是详细用户数据
+
+SSO_USER_INFO_TYPE = 'detail'  # 'detail'
 
 SSO_APP_ID = 'h8667_vmplatform'
 SSO_APP_SECRET = 'CABC4D89F1B94852B05231A9E4E053BC'

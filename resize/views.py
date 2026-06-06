@@ -4,6 +4,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
+from hpjx.hpjx_sso import sso_require_login
 
 from .forms import DiskResizeForm
 from .models import DiskResizeTask
@@ -20,7 +21,8 @@ from .services.vc_service import (
 )
 
 
-@sso_required
+@sso_require_login(sso_verify_type="normal", response_type="html")
+# @sso_required
 def index(request):
     """首页"""
 
@@ -197,3 +199,88 @@ def api_vm_disks(request):
         return JsonResponse(
             {'error': str(e)}, status=500
         )
+
+
+def sso_logout_init(request):
+    """初始化 SSO 退出流程：调用 SSO 退出接口，成功后清除 SsoUserInfo 并返回 JSON。"""
+    import requests as http_requests
+    from django.conf import settings
+    from django.http import JsonResponse
+
+    def JsonYes(data=None, msg='成功'):
+        """返回成功 JSON 响应"""
+        result = {'status': 'yes', 'code': '50000', 'msg': msg}
+        if data:
+            result.update(data)
+        return JsonResponse(result)
+
+    def JsonNo(msg='失败'):
+        """返回失败 JSON 响应"""
+        return JsonResponse({'status': 'no', 'code': '50001', 'msg': msg})
+
+    token = request.COOKIES.get(settings.TOKEN_KEY, '')
+    if not token:
+        return JsonNo('缺少 token')
+
+    sso_user_info = getattr(request, 'SsoUserInfo', None)
+    if not sso_user_info:
+        return JsonNo('未登录')
+
+    card_no = sso_user_info.get('card_no', '')
+    app_id = getattr(settings, 'SSO_APP_ID', '')
+    app_secret = getattr(settings, 'SSO_APP_SECRET', '')
+
+    if hasattr(settings, 'SSO_IS_DEBUG') and settings.SSO_IS_DEBUG:
+        app_id = getattr(settings, 'DEV_SSO_APP_ID', app_id)
+        app_secret = getattr(settings, 'DEV_SSO_APP_SECRET', app_secret)
+
+    sso_logout_uri = getattr(settings, 'SSO_LOGOUT_URI', '')
+    if hasattr(settings, 'SSO_IS_DEBUG') and settings.SSO_IS_DEBUG:
+        sso_logout_uri = getattr(settings, 'DEV_SSO_LOGOUT_URI', sso_logout_uri)
+
+    if sso_logout_uri and not sso_logout_uri.startswith(('http://', 'https://')):
+        sso_logout_uri = 'http://' + sso_logout_uri
+
+    try:
+        response = http_requests.post(
+            sso_logout_uri,
+            data={
+                'app_id': app_id,
+                'app_secure': app_secret,
+                'token': token,
+                'card_no': card_no,
+            },
+            timeout=10
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('status') == 'yes':
+                request.SsoUserInfo = {}
+
+                if hasattr(request, 'session') and request.session.exists(request.session.session_key):
+                    request.session.flush()
+
+                login_url = getattr(settings, 'SSO_LOGIN_INDEX_URL', 'sso.4307.com/ctrl/login/')
+                if hasattr(settings, 'SSO_IS_DEBUG') and settings.SSO_IS_DEBUG:
+                    login_url = getattr(settings, 'DEV_SSO_LOGIN_INDEX_URL', login_url)
+
+                if login_url and not login_url.startswith(('http://', 'https://')):
+                    login_url = 'https://' + login_url
+
+                redirect_url = request.build_absolute_uri('/')
+                sso_login_url = f'{login_url}?redirect_url={redirect_url}'
+
+                return JsonYes({'logout_url': sso_login_url}, '退出成功')
+            return JsonNo(result.get('desc', 'SSO 退出失败'))
+        return JsonNo(f'SSO 响应状态码: {response.status_code}')
+
+    except Exception as e:
+        if hasattr(request, 'session') and request.session.exists(request.session.session_key):
+            request.session.flush()
+        return JsonNo(f'退出登录失败: {str(e)}')
+
+
+def logout(request):
+    """SSO 退出回调：处理 SSO 服务器的注销回调，清除本地会话并重定向到主页。"""
+    return sso_logout_init(request)
