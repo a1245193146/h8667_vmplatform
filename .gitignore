@@ -9,6 +9,7 @@ packages/
 
 # Zip archive
 *.zip
+*.rar
 
 # IDE
 .vscode/
