@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+db.sqlite3
+
+# Offline packages (too large for git)
+packages/
+
+# Zip archive
+*.zip
+
+# IDE
+.vscode/
+.idea/
+
+# OpenCode / Agent internals
+.omo/
+.sisyphus/
+.agents/
+
+# Preview files
+_preview.html
+
+# OS
+Thumbs.db
+.DS_Store

@@ -1,0 +1,14 @@
+# h8667_vmplatform 依赖清单
+# 使用方法（联网环境下载离线包）:
+#   pip download -d packages/ -r requirements.txt
+# 内网安装:
+#   pip install --no-index --find-links=packages/ -r requirements.txt
+
+Django>=6.0,<6.1
+celery>=5.3,<6.0
+redis>=5.0,<6.0
+pyvmomi>=8.0
+paramiko>=3.0,<4.0
+mysqlclient>=2.2,<3.0
+
+# hpjx — 公司内部SSO包，需从内网单独获取，不在此列

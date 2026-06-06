@@ -1,0 +1,34 @@
+{% extends "resize/base.html" %}
+
+{% block title %}首页 - 虚拟机磁盘扩容平台{% endblock %}
+
+{% block content %}
+<div class="row mt-4">
+    <div class="col-md-6 mb-4">
+        <div class="card h-100 shadow border-primary border-opacity-50">
+            <div class="card-body text-center d-flex flex-column justify-content-center py-5">
+                <h3 class="card-title text-primary mb-3 fw-bold">提交扩容申请</h3>
+                <p class="card-text text-muted mb-4 px-3">为您负责的虚拟机在线申请磁盘扩容，单次扩容 &lt; 200GB 将直接自动审批并执行。</p>
+                <a href="{% url 'submit' %}" class="btn btn-primary btn-lg mt-auto mx-auto px-5 rounded-pill shadow-sm">立即申请</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-4">
+        <div class="card h-100 shadow border-success border-opacity-50">
+            <div class="card-body text-center d-flex flex-column justify-content-center py-5">
+                <h3 class="card-title text-success mb-3 fw-bold">查看历史记录</h3>
+                <p class="card-text text-muted mb-4 px-3">查看所有已提交的扩容申请、审批状态以及后台自动执行的结果日志。</p>
+                <a href="{% url 'history' %}" class="btn btn-success btn-lg mt-auto mx-auto px-5 rounded-pill shadow-sm">历史记录</a>
+            </div>
+        </div>
+    </div>
+    
+    {% if is_admin and pending_count > 0 %}
+    <div class="col-12 mt-2">
+        <div class="alert alert-warning shadow-sm border-warning text-center fs-5">
+            您有 <strong class="text-danger fs-4">{{ pending_count }}</strong> 个待审批的任务，请前往 <a href="{% url 'admin_pending' %}" class="alert-link">审批管理</a> 进行处理。
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

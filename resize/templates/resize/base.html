@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}虚拟机磁盘扩容平台{% endblock %}</title>
+    {% load static %}
+    <link href="{% static 'resize/css/bootstrap.min.css' %}" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; min-height: 100vh; display: flex; flex-direction: column; }
+        main { flex: 1; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 shadow-sm">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="{% url 'index' %}">VM扩容平台</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="{% url 'index' %}">首页</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'submit' %}">提交申请</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'history' %}">历史记录</a></li>
+                    {% if is_admin %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'admin_pending' %}">
+                            审批管理
+                            {% if pending_count and pending_count > 0 %}
+                            <span class="badge bg-danger rounded-pill">{{ pending_count }}</span>
+                            {% endif %}
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+                <ul class="navbar-nav">
+                    {% if is_authenticated %}
+                    <li class="nav-text text-light mt-2 me-3">欢迎, {{ sso_username }}</li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show shadow-sm">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="bg-light text-center py-3 mt-4 border-top">
+        <div class="container text-muted small">
+            虚拟机磁盘扩容平台 v2.0
+        </div>
+    </footer>
+
+    <script src="{% static 'resize/js/bootstrap.bundle.min.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,15 @@
+---
+- hosts: all
+
+  gather_facts: no
+
+  tasks:
+
+    - name: rescan disk
+      win_shell: |
+        "rescan" | diskpart
+
+    - name: extend partition
+      win_shell: |
+        $size = (Get-PartitionSupportedSize -DriveLetter {{ drive }}).SizeMax
+        Resize-Partition -DriveLetter {{ drive }} -Size $size

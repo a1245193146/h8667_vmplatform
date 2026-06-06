@@ -1,0 +1,158 @@
+{% extends "resize/base.html" %}
+
+{% block title %}提交申请 - 虚拟机磁盘扩容平台{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm max-w-lg mx-auto" style="max-width: 800px;">
+    <div class="card-header bg-white">
+        <h4 class="mb-0">提交扩容申请</h4>
+    </div>
+    <div class="card-body">
+        <form id="submitForm" method="POST" action="{% url 'submit' %}">
+            {% csrf_token %}
+            <div class="mb-4">
+                <label for="vm_ip" class="form-label fw-bold">虚拟机 IP 地址</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="vm_ip" name="vm_ip" placeholder="例如: 192.168.1.100" required>
+                    <button class="btn btn-outline-primary" type="button" id="btnQueryDisks">查询磁盘</button>
+                </div>
+                <div id="vmStateWarning" class="mt-2"></div>
+            </div>
+
+            <div id="diskSelectionGroup" style="display: none;">
+                <div class="mb-3">
+                    <label for="diskSelect" class="form-label fw-bold">选择需要扩容的磁盘</label>
+                    <select class="form-select" id="diskSelect" required>
+                        <option value="">请选择磁盘...</option>
+                    </select>
+                </div>
+
+                <input type="hidden" id="disk_key" name="disk_key">
+                <input type="hidden" id="disk_label" name="disk_label">
+                <input type="hidden" id="current_size" name="current_size">
+
+                <div class="mb-3">
+                    <label for="add_size" class="form-label fw-bold">扩容大小 (GB)</label>
+                    <input type="number" class="form-control" id="add_size" name="add_size" min="1" max="500" required>
+                    <div class="form-text" id="autoApproveHint">单次扩容 &lt; 200GB 将自动审批。</div>
+                </div>
+
+                <div class="mb-4">
+                    <label for="reason" class="form-label fw-bold">申请原因</label>
+                    <textarea class="form-control" id="reason" name="reason" rows="3" required placeholder="请详细说明扩容原因..."></textarea>
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary btn-lg" id="btnSubmit">提交申请</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const btnQuery = document.getElementById('btnQueryDisks');
+    const ipInput = document.getElementById('vm_ip');
+    const stateWarning = document.getElementById('vmStateWarning');
+    const diskGroup = document.getElementById('diskSelectionGroup');
+    const diskSelect = document.getElementById('diskSelect');
+    const addSizeInput = document.getElementById('add_size');
+    const autoApproveHint = document.getElementById('autoApproveHint');
+
+    // Hidden form inputs
+    const hiddenDiskKey = document.getElementById('disk_key');
+    const hiddenDiskLabel = document.getElementById('disk_label');
+    const hiddenCurrentSize = document.getElementById('current_size');
+
+    // Dynamically update auto-approve hint
+    addSizeInput.addEventListener('input', function() {
+        const size = parseInt(this.value);
+        if (size && size < 200) {
+            autoApproveHint.className = 'form-text text-success';
+            autoApproveHint.textContent = '当前申请容量 < 200GB，将自动审批执行。';
+        } else if (size >= 200) {
+            autoApproveHint.className = 'form-text text-warning';
+            autoApproveHint.textContent = '当前申请容量 >= 200GB，需要管理员手动审批。';
+        } else {
+            autoApproveHint.className = 'form-text';
+            autoApproveHint.textContent = '单次扩容 < 200GB 将自动审批。';
+        }
+    });
+
+    btnQuery.addEventListener('click', async function() {
+        const ip = ipInput.value.trim();
+        if (!ip) {
+            alert("请输入虚拟机 IP 地址");
+            return;
+        }
+
+        btnQuery.disabled = true;
+        btnQuery.textContent = '查询中...';
+        stateWarning.innerHTML = '';
+        diskSelect.innerHTML = '<option value="">请选择磁盘...</option>';
+
+        try {
+            const response = await fetch(`/api/vm-disks/?ip=${encodeURIComponent(ip)}`);
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || '查询失败');
+            }
+
+            // Warning states
+            const vmStatus = data.vm_status || {};
+            if (vmStatus.has_snapshot) {
+                stateWarning.innerHTML += '<div class="alert alert-danger py-2 mb-2 shadow-sm">警告：该虚拟机存在快照，无法在原磁盘扩容！请先删除快照。</div>';
+            }
+            if (vmStatus.power_state === 'poweredOff') {
+                stateWarning.innerHTML += '<div class="alert alert-warning py-2 mb-2 shadow-sm">提示：该虚拟机当前处于关机状态，扩容后需开机手动完成文件系统扩容。</div>';
+            }
+
+            if (data.disks && data.disks.length > 0) {
+                data.disks.forEach(disk => {
+                    const option = document.createElement('option');
+                    option.value = disk.disk_key;
+                    option.dataset.label = disk.label;
+                    option.dataset.size = disk.size_gb;
+                    
+                    const label = disk.label;
+                    const scsi = disk.scsi_id;
+                    const size = disk.size_gb;
+                    const ds = disk.datastore;
+                    const free = disk.free_space_gb;
+                    
+                    option.textContent = `${label} (SCSI ${scsi}) - ${size} GB [datastore: ${ds}, 剩余: ${free} GB]`;
+                    diskSelect.appendChild(option);
+                });
+                diskGroup.style.display = 'block';
+            } else {
+                stateWarning.innerHTML = '<div class="alert alert-info py-2 shadow-sm">未查询到可用磁盘。</div>';
+                diskGroup.style.display = 'none';
+            }
+        } catch (error) {
+            stateWarning.innerHTML = `<div class="alert alert-danger py-2 shadow-sm">${error.message}</div>`;
+            diskGroup.style.display = 'none';
+        } finally {
+            btnQuery.disabled = false;
+            btnQuery.textContent = '查询磁盘';
+        }
+    });
+
+    diskSelect.addEventListener('change', function() {
+        const selected = this.options[this.selectedIndex];
+        if (selected.value) {
+            hiddenDiskKey.value = selected.value;
+            hiddenDiskLabel.value = selected.dataset.label;
+            hiddenCurrentSize.value = selected.dataset.size;
+        } else {
+            hiddenDiskKey.value = '';
+            hiddenDiskLabel.value = '';
+            hiddenCurrentSize.value = '';
+        }
+    });
+});
+</script>
+{% endblock %}
