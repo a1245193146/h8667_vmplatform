@@ -202,7 +202,7 @@ def dns_create_a_record(domain, zone, ip, ttl=3600):
 
 
 def gen_cert(domain):
-    cert_server = Certsrv('Nettrix14.hp4307.com', 'bakadmin', '1qazxsw@', auth_method='ntlm', ssl=False,
+    cert_server = Certsrv('http://Nettrix14.hp4307.com', 'bakadmin', '1qazxsw@', auth_method='ntlm',
             cafile=certifi.where())
 
     """生成指定域名的证书"""
