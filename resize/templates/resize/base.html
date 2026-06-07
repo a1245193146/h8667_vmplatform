@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}信息化运维平台{% endblock %}</title>
+    <title>{% block title %}虚拟机磁盘扩容平台{% endblock %}</title>
     {% load static %}
     <link href="{% static 'resize/css/bootstrap.min.css' %}" rel="stylesheet">
     <style>
@@ -14,7 +14,7 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 shadow-sm">
         <div class="container">
-            <a class="navbar-brand fw-bold" href="{% url 'index' %}">信息化运维平台</a>
+            <a class="navbar-brand fw-bold" href="{% url 'index' %}">VM扩容平台</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
@@ -23,24 +23,26 @@
                     <li class="nav-item"><a class="nav-link" href="{% url 'index' %}">首页</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'submit' %}">提交申请</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'history' %}">历史记录</a></li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">域名管理</a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{% url 'domain:submit' %}">申请域名配置</a></li>
-                            <li><a class="dropdown-item" href="{% url 'domain:history' %}">配置记录</a></li>
-                            <li><a class="dropdown-item" href="{% url 'domain:ledger' %}">域名台账</a></li>
-                            {% if is_admin %}
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{% url 'domain:admin_pending' %}">域名审批</a></li>
-                            {% endif %}
-                        </ul>
-                    </li>
                     {% if is_admin %}
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'admin_pending' %}">
                             审批管理
                             {% if pending_count and pending_count > 0 %}
                             <span class="badge bg-danger rounded-pill">{{ pending_count }}</span>
+                            {% endif %}
+                        </a>
+                    </li>
+                    {% endif %}
+                    <!-- 域名管理 -->
+                    <li class="nav-item"><span class="nav-link text-secondary disabled px-1">|</span></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'domain_submit' %}">申请域名</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'domain_history' %}">域名记录</a></li>
+                    {% if is_admin %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'domain_admin_pending' %}">
+                            域名审批
+                            {% if domain_pending_count and domain_pending_count > 0 %}
+                            <span class="badge bg-warning text-dark rounded-pill">{{ domain_pending_count }}</span>
                             {% endif %}
                         </a>
                     </li>
@@ -91,7 +93,7 @@
 
     <footer class="bg-light text-center py-3 mt-4 border-top">
         <div class="container text-muted small">
-            信息化运维平台 v2.0
+            虚拟机磁盘扩容平台 v2.0
         </div>
     </footer>
 
@@ -99,7 +101,7 @@
     <script>
         function doLogout() {
             if (!confirm('确定要退出登录吗？')) return;
-
+            
             fetch('{% url "sso_logout_init" %}', {
                 method: 'GET',
                 credentials: 'same-origin'

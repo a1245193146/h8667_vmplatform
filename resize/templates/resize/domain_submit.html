@@ -1,0 +1,56 @@
+{% extends "resize/base.html" %}
+
+{% block title %}申请域名配置 - 域名管理平台{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm mx-auto" style="max-width: 700px;">
+    <div class="card-header bg-white">
+        <h4 class="mb-0 fw-bold">申请域名配置</h4>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info py-2 mb-4">
+            <small><strong>说明：</strong>域名必须以 <code>.4307.com</code> 结尾，例如: <code>myapp.4307.com</code>。提交后需管理员审批，批准后系统将自动配置 nginx 反代、DNS 记录和 SSL 证书。</small>
+        </div>
+        <form method="POST" action="{% url 'domain_submit' %}">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+            {% endif %}
+            <div class="mb-3">
+                <label for="id_domain" class="form-label fw-bold">域名</label>
+                {{ form.domain }}
+                {% if form.domain.errors %}
+                <div class="text-danger small mt-1">{{ form.domain.errors }}</div>
+                {% endif %}
+                <div class="form-text">必须以 .4307.com 结尾，例如: myapp.4307.com</div>
+            </div>
+            <div class="mb-3">
+                <label for="id_backend_ip" class="form-label fw-bold">后端 IP 地址</label>
+                {{ form.backend_ip }}
+                {% if form.backend_ip.errors %}
+                <div class="text-danger small mt-1">{{ form.backend_ip.errors }}</div>
+                {% endif %}
+                <div class="form-text">运行服务的服务器 IP（nginx 将反代到此地址）</div>
+            </div>
+            <div class="mb-3">
+                <label for="id_port" class="form-label fw-bold">后端端口</label>
+                {{ form.port }}
+                {% if form.port.errors %}
+                <div class="text-danger small mt-1">{{ form.port.errors }}</div>
+                {% endif %}
+                <div class="form-text">后端服务监听的端口 (1-65535)</div>
+            </div>
+            <div class="mb-4">
+                <label for="id_reason" class="form-label fw-bold">申请原因</label>
+                {{ form.reason }}
+                {% if form.reason.errors %}
+                <div class="text-danger small mt-1">{{ form.reason.errors }}</div>
+                {% endif %}
+            </div>
+            <div class="d-grid">
+                <button type="submit" class="btn btn-primary btn-lg">提交申请</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
