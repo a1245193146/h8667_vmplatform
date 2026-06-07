@@ -124,16 +124,6 @@ class DiskResizeTask(models.Model):
 
 class DomainTask(models.Model):
 
-    STATUS_CHOICES = (
-        ('pending_approval', '待审批'),
-        ('approved', '已批准'),
-        ('rejected', '已驳回'),
-        ('pending', '待执行'),
-        ('running', '执行中'),
-        ('success', '成功'),
-        ('failed', '失败'),
-    )
-
     applicant = models.CharField(
         max_length=100, verbose_name='申请人'
     )
