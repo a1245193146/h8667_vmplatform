@@ -2,25 +2,12 @@
 
 import logging
 from pathlib import Path
-from typing import Any
 
-import certifi  # pyright: ignore[reportMissingImports]
+import certifi
+import OpenSSL.crypto
 import requests
-
-try:
-    import OpenSSL.crypto  # pyright: ignore[reportMissingImports]
-except ImportError:  # pragma: no cover
-    OpenSSL: Any = None
-
-try:
-    from certsrv import Certsrv  # pyright: ignore[reportMissingImports]
-except ImportError:  # pragma: no cover
-    Certsrv: Any = None
-
-try:
-    from pypsrp.client import Client  # pyright: ignore[reportMissingImports]
-except ImportError:  # pragma: no cover
-    Client: Any = None
+from certsrv import Certsrv
+from pypsrp.client import Client
 
 
 logger = logging.getLogger(__name__)
