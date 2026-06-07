@@ -4,9 +4,12 @@ import logging
 from pathlib import Path
 
 import certifi
-import OpenSSL.crypto
 import requests
 from certsrv import Certsrv
+from cryptography import x509
+from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from pypsrp.client import Client
 
 
@@ -212,24 +215,27 @@ def gen_cert(domain):
     DN = domain
 
     # 生成私钥
-    key = OpenSSL.crypto.PKey()
-    key.generate_key(OpenSSL.crypto.TYPE_RSA, 2048)
+    key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+    )
 
     # 生成csr
-    req = OpenSSL.crypto.X509Req()
-    req.get_subject().CN = DN  # 域名
-    san_str = f'DNS: {DN}'
-    san = san_str.encode()
-    san_extension = OpenSSL.crypto.X509Extension(b"subjectAltName", False, san)
-    req.add_extensions([san_extension])
-
-    req.set_pubkey(key)
-    req.sign(key, "sha256")
+    csr = x509.CertificateSigningRequestBuilder().subject_name(
+        x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, DN)])
+    ).add_extension(
+        x509.SubjectAlternativeName([x509.DNSName(DN)]),
+        critical=False,
+    ).sign(key, hashes.SHA256())
 
     # 从adcs获取证书
-    pem_req = OpenSSL.crypto.dump_certificate_request(OpenSSL.crypto.FILETYPE_PEM, req)
+    pem_req = csr.public_bytes(serialization.Encoding.PEM)
     pem_cert = cert_server.get_cert(pem_req, "WebServer")
-    pem_key = OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, key)
+    pem_key = key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.TraditionalOpenSSL,
+        serialization.NoEncryption()
+    )
     _cert = pem_cert.decode()
     _key = pem_key.decode()
     # print('Cert:\n{}'.format(pem_cert.decode()))
