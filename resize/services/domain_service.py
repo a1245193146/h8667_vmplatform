@@ -1,15 +1,15 @@
 """Domain configuration service."""
 
 import logging
+import re
 from pathlib import Path
 
-import certifi
 import requests
-from certsrv import Certsrv
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from requests_ntlm import HttpNtlmAuth
 from pypsrp.client import Client
 
 
@@ -204,10 +204,41 @@ def dns_create_a_record(domain, zone, ip, ttl=3600):
             return False, err
 
 
-def gen_cert(domain):
-    cert_server = Certsrv('Nettrix14.hp4307.com', 'bakadmin', '1qazxsw@', auth_method='ntlm', ssl=False,
-            cafile=certifi.where())
+def _get_cert_from_adcs(server, username, password, csr_pem, template="WebServer"):
+    """通过 HTTP 向 Microsoft ADCS 提交 CSR 并获取签名证书。
 
+    替代 certsrv 库（该库强制 HTTPS，内网环境不适用）。
+    """
+    auth = HttpNtlmAuth(username, password)
+
+    # 提交 CSR
+    submit_url = f'http://{server}/certsrv/certfnsh.asp'
+    csr_str = csr_pem.decode() if isinstance(csr_pem, bytes) else csr_pem
+    data = {
+        'Mode': 'newreq',
+        'CertRequest': csr_str,
+        'CertAttrib': f'CertificateTemplate:{template}\r\n',
+        'TargetStoreFlags': '0',
+        'SaveCert': 'yes',
+    }
+    response = requests.post(submit_url, data=data, auth=auth, timeout=30)
+    response.raise_for_status()
+
+    # 从响应 HTML 中提取 Request ID
+    match = re.search(r'certnew\.cer\?ReqID=(\d+)', response.text)
+    if not match:
+        raise Exception(f'ADCS 未返回证书 ID，响应内容: {response.text[:500]}')
+    req_id = match.group(1)
+
+    # 下载证书
+    cert_url = f'http://{server}/certsrv/certnew.cer?ReqID={req_id}&Enc=b64'
+    cert_response = requests.get(cert_url, auth=auth, timeout=30)
+    cert_response.raise_for_status()
+
+    return cert_response.content
+
+
+def gen_cert(domain):
     """生成指定域名的证书"""
     err = None
     res = None
@@ -228,9 +259,15 @@ def gen_cert(domain):
         critical=False,
     ).sign(key, hashes.SHA256())
 
-    # 从adcs获取证书
+    # 从adcs获取证书 (HTTP + NTLM)
     pem_req = csr.public_bytes(serialization.Encoding.PEM)
-    pem_cert = cert_server.get_cert(pem_req, "WebServer")
+    pem_cert = _get_cert_from_adcs(
+        server='Nettrix14.hp4307.com',
+        username='bakadmin',
+        password='1qazxsw@',
+        csr_pem=pem_req,
+        template='WebServer',
+    )
     pem_key = key.private_bytes(
         serialization.Encoding.PEM,
         serialization.PrivateFormat.TraditionalOpenSSL,
@@ -238,8 +275,6 @@ def gen_cert(domain):
     )
     _cert = pem_cert.decode()
     _key = pem_key.decode()
-    # print('Cert:\n{}'.format(pem_cert.decode()))
-    # print('Key:\n{}'.format(pem_key.decode()))
     res = (_cert, _key)
     return res, err
 
