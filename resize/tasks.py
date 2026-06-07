@@ -1,13 +1,17 @@
+# pyright: reportAttributeAccessIssue=false
 from celery import shared_task
 from django.utils import timezone
 
 from .models import DiskResizeTask
+from .models import DomainTask
 
 from .services.vc_service import resize_vm_disk
 
 from .services.ansible_service import (
     resize_windows_partition
 )
+
+from .services.domain_service import execute_domain_config
 
 
 @shared_task
@@ -59,6 +63,57 @@ def execute_resize_task(task_id):
             f'{vc_message}\n'
             f'文件系统扩容: {ansible_result}'
         )
+
+    except Exception as e:
+
+        task.status = 'failed'
+        task.result = str(e)
+
+    task.finish_time = timezone.now()
+    task.save()
+
+
+@shared_task
+def execute_domain_task(task_id):
+    """Celery 异步执行域名配置。
+
+    流程:
+    1. execute_domain_config: nginx反代 + DNS + SSL证书
+    2. 记录各步骤状态到 result 字段
+    """
+
+    task = DomainTask.objects.get(
+        id=task_id
+    )
+
+    try:
+
+        task.status = 'running'
+        task.save()
+
+        result = execute_domain_config(
+            domain=task.domain,
+            ip=task.backend_ip,
+            port=task.port,
+        )
+
+        # 格式化结果: 显示各步骤状态
+        result_lines = []
+        status_map = {
+            'status1': 'nginx反代',
+            'status2': '负载均衡',
+            'status3': 'DNS记录',
+            'status4': 'SSL证书',
+        }
+        for key, label in status_map.items():
+            val = result.get(key, 'False')
+            result_lines.append(f'{label}: {"成功" if val == "True" else "失败"}')
+
+        if result.get('mess'):
+            result_lines.append('消息: ' + '; '.join(str(m) for m in result['mess']))
+
+        task.status = 'success'
+        task.result = '\n'.join(result_lines)
 
     except Exception as e:
 

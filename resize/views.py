@@ -5,10 +5,9 @@ from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from hpjx.hpjx_sso import sso_require_login
-
-from .forms import DiskResizeForm
-from .models import DiskResizeTask
-from .tasks import execute_resize_task
+from .forms import DiskResizeForm, DomainForm
+from .models import DiskResizeTask, DomainTask
+from .tasks import execute_resize_task, execute_domain_task
 from .sso_utils import (
     sso_required,
     admin_required,
@@ -19,7 +18,6 @@ from .services.vc_service import (
     get_vm_disk_list,
     check_vm_status,
 )
-
 
 @sso_require_login(sso_verify_type="normal", response_type="html")
 # @sso_required
@@ -42,8 +40,7 @@ def submit_resize(request):
             task = form.save(commit=False)
             task.applicant = get_sso_username(request)
 
-            # 需求 #5: <200GB 且存储空间充足
-            # 自动审批并立即异步执行
+            # 虚拟机磁盘 <=200GB: 自动审批并立即异步执行
             if not task.needs_approval:
 
                 task.approval_status = 'auto_approved'
@@ -57,7 +54,7 @@ def submit_resize(request):
 
                 return redirect('history')
 
-            # >=200GB: 进入人工审批
+            # 虚拟机磁盘 >200GB: 进入人工审批
             task.approval_status = 'pending'
             task.status = 'pending_approval'
             task.save()
@@ -218,29 +215,35 @@ def sso_logout_init(request):
         """返回失败 JSON 响应"""
         return JsonResponse({'status': 'no', 'code': '50001', 'msg': msg})
 
+    # 获取当前用户的 token（从 Cookie）
     token = request.COOKIES.get(settings.TOKEN_KEY, '')
     if not token:
         return JsonNo('缺少 token')
 
+    # 获取 SSO 用户信息
     sso_user_info = getattr(request, 'SsoUserInfo', None)
     if not sso_user_info:
         return JsonNo('未登录')
 
     card_no = sso_user_info.get('card_no', '')
+
+    # 构建 SSO 退出参数
     app_id = getattr(settings, 'SSO_APP_ID', '')
     app_secret = getattr(settings, 'SSO_APP_SECRET', '')
-
+    
     if hasattr(settings, 'SSO_IS_DEBUG') and settings.SSO_IS_DEBUG:
         app_id = getattr(settings, 'DEV_SSO_APP_ID', app_id)
         app_secret = getattr(settings, 'DEV_SSO_APP_SECRET', app_secret)
 
+    # 构建 SSO 退出 URL（使用 http）
     sso_logout_uri = getattr(settings, 'SSO_LOGOUT_URI', '')
     if hasattr(settings, 'SSO_IS_DEBUG') and settings.SSO_IS_DEBUG:
         sso_logout_uri = getattr(settings, 'DEV_SSO_LOGOUT_URI', sso_logout_uri)
-
+    
     if sso_logout_uri and not sso_logout_uri.startswith(('http://', 'https://')):
         sso_logout_uri = 'http://' + sso_logout_uri
 
+    # 调用 SSO 退出接口（使用 data 表单提交）
     try:
         response = http_requests.post(
             sso_logout_uri,
@@ -252,30 +255,37 @@ def sso_logout_init(request):
             },
             timeout=10
         )
-
+        
         if response.status_code == 200:
             result = response.json()
             if result.get('status') == 'yes':
+                # SSO 退出成功，清除本地 SsoUserInfo
                 request.SsoUserInfo = {}
-
+                
+                # 清除 Django 会话
                 if hasattr(request, 'session') and request.session.exists(request.session.session_key):
                     request.session.flush()
-
+                
+                # 构建 SSO 登录页面 URL（带 redirect_url 参数）
                 login_url = getattr(settings, 'SSO_LOGIN_INDEX_URL', 'sso.4307.com/ctrl/login/')
                 if hasattr(settings, 'SSO_IS_DEBUG') and settings.SSO_IS_DEBUG:
                     login_url = getattr(settings, 'DEV_SSO_LOGIN_INDEX_URL', login_url)
-
+                
                 if login_url and not login_url.startswith(('http://', 'https://')):
                     login_url = 'https://' + login_url
-
+                
+                # 构建 redirect_url（当前站点主页）
                 redirect_url = request.build_absolute_uri('/')
                 sso_login_url = f'{login_url}?redirect_url={redirect_url}'
-
+                
                 return JsonYes({'logout_url': sso_login_url}, '退出成功')
-            return JsonNo(result.get('desc', 'SSO 退出失败'))
-        return JsonNo(f'SSO 响应状态码: {response.status_code}')
-
+            else:
+                return JsonNo(result.get('desc', 'SSO 退出失败'))
+        else:
+            return JsonNo(f'SSO 响应状态码: {response.status_code}')
+            
     except Exception as e:
+        # 调用失败，清除本地会话
         if hasattr(request, 'session') and request.session.exists(request.session.session_key):
             request.session.flush()
         return JsonNo(f'退出登录失败: {str(e)}')
@@ -284,3 +294,125 @@ def sso_logout_init(request):
 def logout(request):
     """SSO 退出回调：处理 SSO 服务器的注销回调，清除本地会话并重定向到主页。"""
     return sso_logout_init(request)
+
+
+@sso_required
+def domain_submit(request):
+    """提交域名配置申请"""
+
+    if request.method == 'POST':
+
+        form = DomainForm(request.POST)
+
+        if form.is_valid():
+
+            task = form.save(commit=False)
+            task.applicant = get_sso_username(request)
+            task.approval_status = 'pending'
+            task.status = 'pending_approval'
+            task.save()
+
+            return redirect('domain_history')
+
+    else:
+
+        form = DomainForm()
+
+    return render(request, 'resize/domain_submit.html', {
+        'form': form,
+    })
+
+
+@sso_required
+def domain_history(request):
+    """域名配置历史记录"""
+
+    if is_admin(request):
+        tasks = DomainTask.objects.all()
+    else:
+        tasks = DomainTask.objects.filter(
+            applicant=get_sso_username(request)
+        )
+
+    return render(request, 'resize/domain_history.html', {
+        'tasks': tasks,
+    })
+
+
+@sso_required
+def domain_detail(request, task_id):
+    """域名配置任务详情"""
+
+    task = get_object_or_404(
+        DomainTask, id=task_id
+    )
+
+    return render(request, 'resize/domain_detail.html', {
+        'task': task,
+    })
+
+
+@admin_required
+def domain_admin_pending(request):
+    """管理员域名审批列表"""
+
+    tasks = DomainTask.objects.filter(
+        approval_status='pending'
+    )
+
+    return render(request, 'resize/domain_admin_pending.html', {
+        'tasks': tasks,
+    })
+
+
+@admin_required
+@require_POST
+def domain_admin_approve(request, task_id):
+    """管理员批准域名申请"""
+
+    task = get_object_or_404(
+        DomainTask, id=task_id
+    )
+
+    if task.approval_status != 'pending':
+        return JsonResponse(
+            {'error': '该申请已处理'}, status=400
+        )
+
+    task.approval_status = 'approved'
+    task.approved_by = get_sso_username(request)
+    task.approved_at = timezone.now()
+    task.status = 'pending'
+    task.save()
+
+    execute_domain_task.delay(task.id)
+
+    return redirect('domain_admin_pending')
+
+
+@admin_required
+@require_POST
+def domain_admin_reject(request, task_id):
+    """管理员驳回域名申请"""
+
+    task = get_object_or_404(
+        DomainTask, id=task_id
+    )
+
+    if task.approval_status != 'pending':
+        return JsonResponse(
+            {'error': '该申请已处理'}, status=400
+        )
+
+    reject_reason = request.POST.get(
+        'reject_reason', ''
+    )
+
+    task.approval_status = 'rejected'
+    task.approved_by = get_sso_username(request)
+    task.approved_at = timezone.now()
+    task.reject_reason = reject_reason
+    task.status = 'rejected'
+    task.save()
+
+    return redirect('domain_admin_pending')

@@ -28,21 +28,21 @@ urlpatterns = [
         name='detail'
     ),
 
-    # 管理员审批
+    # 管理员审批（使用approval前缀避免与Django Admin冲突）
     path(
-        'admin/pending/',
+        'approval/pending/',
         views.admin_pending,
         name='admin_pending'
     ),
 
     path(
-        'admin/approve/<int:task_id>/',
+        'approval/approve/<int:task_id>/',
         views.admin_approve,
         name='admin_approve'
     ),
 
     path(
-        'admin/reject/<int:task_id>/',
+        'approval/reject/<int:task_id>/',
         views.admin_reject,
         name='admin_reject'
     ),
@@ -59,5 +59,41 @@ urlpatterns = [
         'logout/',
         views.logout,
         name='logout'
+    ),
+
+    path(
+        'domain/',
+        views.domain_submit,
+        name='domain_submit'
+    ),
+
+    path(
+        'domain/history/',
+        views.domain_history,
+        name='domain_history'
+    ),
+
+    path(
+        'domain/detail/<int:task_id>/',
+        views.domain_detail,
+        name='domain_detail'
+    ),
+
+    path(
+        'domain/approval/pending/',
+        views.domain_admin_pending,
+        name='domain_admin_pending'
+    ),
+
+    path(
+        'domain/approval/approve/<int:task_id>/',
+        views.domain_admin_approve,
+        name='domain_admin_approve'
+    ),
+
+    path(
+        'domain/approval/reject/<int:task_id>/',
+        views.domain_admin_reject,
+        name='domain_admin_reject'
     ),
 ]
