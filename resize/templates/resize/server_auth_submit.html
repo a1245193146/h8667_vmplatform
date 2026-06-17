@@ -1,0 +1,48 @@
+{% extends "resize/base.html" %}
+
+{% block title %}服务器授权登录 - 运维平台{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm mx-auto" style="max-width: 700px;">
+    <div class="card-header bg-white">
+        <h4 class="mb-0 fw-bold">服务器授权登录</h4>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info py-2 mb-4">
+            <small><strong>说明：</strong>将指定 AD 域账号授权登录到目标服务器，并加入服务器本地管理员组。多台服务器请用英文逗号 <code>,</code> 分隔。<strong>本功能无需管理员审批，提交后立即自动执行。</strong></small>
+        </div>
+        <form method="POST" action="{% url 'server_auth_submit' %}">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+            {% endif %}
+            <div class="mb-3">
+                <label for="id_login_account" class="form-label fw-bold">授权域账号</label>
+                {{ form.login_account }}
+                {% if form.login_account.errors %}
+                <div class="text-danger small mt-1">{{ form.login_account.errors }}</div>
+                {% endif %}
+                <div class="form-text">需要授权登录的 AD 域账号 (sAMAccountName)，例如: huangjunkang</div>
+            </div>
+            <div class="mb-3">
+                <label for="id_hostname_ip" class="form-label fw-bold">服务器 IP / 主机名</label>
+                {{ form.hostname_ip }}
+                {% if form.hostname_ip.errors %}
+                <div class="text-danger small mt-1">{{ form.hostname_ip.errors }}</div>
+                {% endif %}
+                <div class="form-text">目标服务器 IP 或主机名，多个用英文逗号分隔，例如: 192.168.2.73,192.168.2.74</div>
+            </div>
+            <div class="mb-4">
+                <label for="id_reason" class="form-label fw-bold">申请原因</label>
+                {{ form.reason }}
+                {% if form.reason.errors %}
+                <div class="text-danger small mt-1">{{ form.reason.errors }}</div>
+                {% endif %}
+            </div>
+            <div class="d-grid">
+                <button type="submit" class="btn btn-primary btn-lg">提交并执行</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

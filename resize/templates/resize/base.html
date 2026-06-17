@@ -47,6 +47,14 @@
                         </a>
                     </li>
                     {% endif %}
+                    <!-- 服务器授权登录 -->
+                    <li class="nav-item"><span class="nav-link text-secondary disabled px-1">|</span></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'server_auth_submit' %}">服务器授权</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'server_auth_history' %}">授权记录</a></li>
+                    <!-- 受信任站点 -->
+                    <li class="nav-item"><span class="nav-link text-secondary disabled px-1">|</span></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'trust_site_submit' %}">受信任站点</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'trust_site_history' %}">站点记录</a></li>
                 </ul>
                 <ul class="navbar-nav">
                     {% if is_authenticated %}

@@ -5,9 +5,14 @@ from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from hpjx.hpjx_sso import sso_require_login
-from .forms import DiskResizeForm, DomainForm
-from .models import DiskResizeTask, DomainTask
-from .tasks import execute_resize_task, execute_domain_task
+from .forms import DiskResizeForm, DomainForm, ServerAuthForm, TrustSiteForm
+from .models import DiskResizeTask, DomainTask, ServerAuthTask, TrustSiteTask
+from .tasks import (
+    execute_resize_task,
+    execute_domain_task,
+    execute_server_auth_task,
+    execute_trust_site_task,
+)
 from .sso_utils import (
     sso_required,
     admin_required,
@@ -416,3 +421,127 @@ def domain_admin_reject(request, task_id):
     task.save()
 
     return redirect('domain_admin_pending')
+
+
+# ==================== 服务器授权登录（无需审批） ====================
+
+@sso_required
+def server_auth_submit(request):
+    """提交服务器授权登录申请（无需审批，提交即异步执行）"""
+
+    if request.method == 'POST':
+
+        form = ServerAuthForm(request.POST)
+
+        if form.is_valid():
+
+            task = form.save(commit=False)
+            task.applicant = get_sso_username(request)
+            task.approval_status = 'auto_approved'
+            task.approved_by = 'system'
+            task.approved_at = timezone.now()
+            task.status = 'pending'
+            task.save()
+
+            execute_server_auth_task.delay(task.id)
+
+            return redirect('server_auth_history')
+
+    else:
+
+        form = ServerAuthForm()
+
+    return render(request, 'resize/server_auth_submit.html', {
+        'form': form,
+    })
+
+
+@sso_required
+def server_auth_history(request):
+    """服务器授权登录历史记录"""
+
+    if is_admin(request):
+        tasks = ServerAuthTask.objects.all()
+    else:
+        tasks = ServerAuthTask.objects.filter(
+            applicant=get_sso_username(request)
+        )
+
+    return render(request, 'resize/server_auth_history.html', {
+        'tasks': tasks,
+    })
+
+
+@sso_required
+def server_auth_detail(request, task_id):
+    """服务器授权登录任务详情"""
+
+    task = get_object_or_404(
+        ServerAuthTask, id=task_id
+    )
+
+    return render(request, 'resize/server_auth_detail.html', {
+        'task': task,
+    })
+
+
+# ==================== 设置受信任站点（无需审批） ====================
+
+@sso_required
+def trust_site_submit(request):
+    """提交受信任站点设置申请（无需审批，提交即异步执行）"""
+
+    if request.method == 'POST':
+
+        form = TrustSiteForm(request.POST)
+
+        if form.is_valid():
+
+            task = form.save(commit=False)
+            task.applicant = get_sso_username(request)
+            task.approval_status = 'auto_approved'
+            task.approved_by = 'system'
+            task.approved_at = timezone.now()
+            task.status = 'pending'
+            task.save()
+
+            execute_trust_site_task.delay(task.id)
+
+            return redirect('trust_site_history')
+
+    else:
+
+        form = TrustSiteForm()
+
+    return render(request, 'resize/trust_site_submit.html', {
+        'form': form,
+    })
+
+
+@sso_required
+def trust_site_history(request):
+    """受信任站点设置历史记录"""
+
+    if is_admin(request):
+        tasks = TrustSiteTask.objects.all()
+    else:
+        tasks = TrustSiteTask.objects.filter(
+            applicant=get_sso_username(request)
+        )
+
+    return render(request, 'resize/trust_site_history.html', {
+        'tasks': tasks,
+    })
+
+
+@sso_required
+def trust_site_detail(request, task_id):
+    """受信任站点设置任务详情"""
+
+    task = get_object_or_404(
+        TrustSiteTask, id=task_id
+    )
+
+    return render(request, 'resize/trust_site_detail.html', {
+        'task': task,
+    })

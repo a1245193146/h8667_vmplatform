@@ -1,0 +1,40 @@
+{% extends "resize/base.html" %}
+
+{% block title %}设置受信任站点 - 运维平台{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm mx-auto" style="max-width: 700px;">
+    <div class="card-header bg-white">
+        <h4 class="mb-0 fw-bold">设置受信任站点</h4>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info py-2 mb-4">
+            <small><strong>说明：</strong>通过组策略 (GPO) 将指定域名加入用户的 IE/Edge 受信任站点。<strong>本功能无需管理员审批，提交后立即自动执行。</strong></small>
+        </div>
+        <form method="POST" action="{% url 'trust_site_submit' %}">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+            {% endif %}
+            <div class="mb-3">
+                <label for="id_domain" class="form-label fw-bold">受信任域名</label>
+                {{ form.domain }}
+                {% if form.domain.errors %}
+                <div class="text-danger small mt-1">{{ form.domain.errors }}</div>
+                {% endif %}
+                <div class="form-text">要加入受信任站点的域名，例如: myapp.4307.com</div>
+            </div>
+            <div class="mb-4">
+                <label for="id_reason" class="form-label fw-bold">申请原因</label>
+                {{ form.reason }}
+                {% if form.reason.errors %}
+                <div class="text-danger small mt-1">{{ form.reason.errors }}</div>
+                {% endif %}
+            </div>
+            <div class="d-grid">
+                <button type="submit" class="btn btn-primary btn-lg">提交并执行</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

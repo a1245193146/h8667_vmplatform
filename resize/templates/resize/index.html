@@ -30,5 +30,33 @@
         </div>
     </div>
     {% endif %}
+
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow border-info border-opacity-50">
+            <div class="card-body text-center d-flex flex-column justify-content-center py-4">
+                <h4 class="card-title text-info mb-3 fw-bold">服务器授权登录</h4>
+                <p class="card-text text-muted mb-4 px-2 small">将域账号授权登录到指定服务器并加入本地管理员组，无需审批，提交后自动执行。</p>
+                <a href="{% url 'server_auth_submit' %}" class="btn btn-info btn-lg mt-auto mx-auto px-4 rounded-pill shadow-sm text-white">服务器授权</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow border-warning border-opacity-50">
+            <div class="card-body text-center d-flex flex-column justify-content-center py-4">
+                <h4 class="card-title text-warning mb-3 fw-bold">设置受信任站点</h4>
+                <p class="card-text text-muted mb-4 px-2 small">通过组策略将域名加入 IE/Edge 受信任站点，无需审批，提交后自动执行。</p>
+                <a href="{% url 'trust_site_submit' %}" class="btn btn-warning btn-lg mt-auto mx-auto px-4 rounded-pill shadow-sm">受信任站点</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow border-secondary border-opacity-50">
+            <div class="card-body text-center d-flex flex-column justify-content-center py-4">
+                <h4 class="card-title text-secondary mb-3 fw-bold">申请域名配置</h4>
+                <p class="card-text text-muted mb-4 px-2 small">申请 nginx 反代、DNS 记录与 SSL 证书，需管理员审批后自动配置。</p>
+                <a href="{% url 'domain_submit' %}" class="btn btn-secondary btn-lg mt-auto mx-auto px-4 rounded-pill shadow-sm">申请域名</a>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}

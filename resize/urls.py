@@ -96,4 +96,42 @@ urlpatterns = [
         views.domain_admin_reject,
         name='domain_admin_reject'
     ),
+
+    # 服务器授权登录（无需审批）
+    path(
+        'serverauth/',
+        views.server_auth_submit,
+        name='server_auth_submit'
+    ),
+
+    path(
+        'serverauth/history/',
+        views.server_auth_history,
+        name='server_auth_history'
+    ),
+
+    path(
+        'serverauth/detail/<int:task_id>/',
+        views.server_auth_detail,
+        name='server_auth_detail'
+    ),
+
+    # 设置受信任站点（无需审批）
+    path(
+        'trustsite/',
+        views.trust_site_submit,
+        name='trust_site_submit'
+    ),
+
+    path(
+        'trustsite/history/',
+        views.trust_site_history,
+        name='trust_site_history'
+    ),
+
+    path(
+        'trustsite/detail/<int:task_id>/',
+        views.trust_site_detail,
+        name='trust_site_detail'
+    ),
 ]

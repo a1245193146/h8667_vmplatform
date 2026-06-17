@@ -203,3 +203,154 @@ class DomainTask(models.Model):
 
     def __str__(self):
         return f'{self.domain} - {self.applicant}'
+
+
+class ServerAuthTask(models.Model):
+    """Windows 服务器授权登录任务。
+
+    将指定域账号授权登录到指定服务器（写入 AD userWorkstations），
+    并将该账号加入服务器本地管理员组。无需人工审批，提交后自动执行。
+    """
+
+    # 无审批: 提交即自动批准并异步执行
+    STATUS_CHOICES = (
+        ('pending', '待执行'),
+        ('running', '执行中'),
+        ('success', '成功'),
+        ('failed', '失败'),
+    )
+
+    applicant = models.CharField(
+        max_length=100, verbose_name='申请人'
+    )
+
+    login_account = models.CharField(
+        max_length=100,
+        verbose_name='授权域账号',
+        help_text='需要授权登录的 AD 域账号 (sAMAccountName)'
+    )
+
+    hostname_ip = models.CharField(
+        max_length=500,
+        verbose_name='服务器IP/主机名',
+        help_text='目标服务器，多个用英文逗号分隔'
+    )
+
+    reason = models.TextField(
+        verbose_name='申请原因'
+    )
+
+    # 审批字段（无人工审批，自动批准；保留以与其它模块保持一致）
+    approval_status = models.CharField(
+        max_length=20,
+        choices=(
+            ('auto_approved', '自动批准'),
+        ),
+        default='auto_approved',
+        verbose_name='审批状态'
+    )
+
+    approved_by = models.CharField(
+        max_length=100, null=True, blank=True, verbose_name='审批人'
+    )
+
+    approved_at = models.DateTimeField(
+        null=True, blank=True, verbose_name='审批时间'
+    )
+
+    # 执行状态
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='任务状态'
+    )
+
+    result = models.TextField(
+        null=True, blank=True, verbose_name='执行结果'
+    )
+
+    create_time = models.DateTimeField(
+        auto_now_add=True, verbose_name='创建时间'
+    )
+
+    finish_time = models.DateTimeField(
+        null=True, blank=True, verbose_name='完成时间'
+    )
+
+    class Meta:
+        verbose_name = '服务器授权登录任务'
+        verbose_name_plural = '服务器授权登录任务'
+        ordering = ['-id']
+
+    def __str__(self):
+        return f'{self.login_account} -> {self.hostname_ip}'
+
+
+class TrustSiteTask(models.Model):
+    """设置受信任站点任务。
+
+    通过 WinRM 在域控上执行组策略 (GPO) 更新，
+    将指定域名加入用户的 IE/Edge 受信任站点。无需人工审批，提交后自动执行。
+    """
+
+    STATUS_CHOICES = (
+        ('pending', '待执行'),
+        ('running', '执行中'),
+        ('success', '成功'),
+        ('failed', '失败'),
+    )
+
+    applicant = models.CharField(
+        max_length=100, verbose_name='申请人'
+    )
+
+    domain = models.CharField(
+        max_length=255,
+        verbose_name='受信任域名',
+        help_text='要加入受信任站点的域名，例如: myapp.4307.com'
+    )
+
+    reason = models.TextField(
+        verbose_name='申请原因'
+    )
+
+    # 审批字段（无人工审批，自动批准；保留以与其它模块保持一致）
+    approval_status = models.CharField(
+        max_length=20,
+        choices=(
+            ('auto_approved', '自动批准'),
+        ),
+        default='auto_approved',
+        verbose_name='审批状态'
+    )
+
+    approved_by = models.CharField(
+        max_length=100, null=True, blank=True, verbose_name='审批人'
+    )
+
+    approved_at = models.DateTimeField(
+        null=True, blank=True, verbose_name='审批时间'
+    )
+
+    # 执行状态
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='任务状态'
+    )
+
+    result = models.TextField(
+        null=True, blank=True, verbose_name='执行结果'
+    )
+
+    create_time = models.DateTimeField(
+        auto_now_add=True, verbose_name='创建时间'
+    )
+
+    finish_time = models.DateTimeField(
+        null=True, blank=True, verbose_name='完成时间'
+    )
+
+    class Meta:
+        verbose_name = '受信任站点任务'
+        verbose_name_plural = '受信任站点任务'
+        ordering = ['-id']
+
+    def __str__(self):
+        return f'{self.domain} - {self.applicant}'

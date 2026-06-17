@@ -1,0 +1,68 @@
+{% extends "resize/base.html" %}
+
+{% block title %}服务器授权详情 - 运维平台{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                <h4 class="mb-0 fw-bold">服务器授权登录任务 #{{ task.id }}</h4>
+                <a href="javascript:history.back()" class="btn btn-sm btn-outline-secondary rounded-pill px-3">返回</a>
+            </div>
+            <div class="card-body">
+                <h5 class="card-title text-primary mb-3 border-bottom pb-2 fw-bold">基本信息</h5>
+                <dl class="row mb-4 text-secondary">
+                    <dt class="col-sm-3 text-dark">授权域账号</dt>
+                    <dd class="col-sm-9 fw-medium">{{ task.login_account }}</dd>
+
+                    <dt class="col-sm-3 text-dark">服务器 IP/主机名</dt>
+                    <dd class="col-sm-9">{{ task.hostname_ip }}</dd>
+
+                    <dt class="col-sm-3 text-dark">申请人</dt>
+                    <dd class="col-sm-9">{{ task.applicant }}</dd>
+
+                    <dt class="col-sm-3 text-dark">申请时间</dt>
+                    <dd class="col-sm-9">{{ task.create_time|date:"Y-m-d H:i:s" }}</dd>
+
+                    <dt class="col-sm-3 text-dark">申请原因</dt>
+                    <dd class="col-sm-9"><div class="bg-light p-2 rounded border">{{ task.reason|linebreaksbr }}</div></dd>
+                </dl>
+
+                <h5 class="card-title text-success mb-3 border-bottom pb-2 fw-bold">执行结果</h5>
+                <dl class="row mb-0 text-secondary">
+                    <dt class="col-sm-3 text-dark">审批方式</dt>
+                    <dd class="col-sm-9"><span class="badge bg-info text-dark px-2 py-1">自动批准（无需审批）</span></dd>
+
+                    <dt class="col-sm-3 text-dark">任务状态</dt>
+                    <dd class="col-sm-9">
+                        {% if task.status == 'pending' %}
+                            <span class="badge bg-warning text-dark px-2 py-1">等待执行</span>
+                        {% elif task.status == 'running' %}
+                            <span class="badge bg-primary px-2 py-1">执行中</span>
+                        {% elif task.status == 'success' %}
+                            <span class="badge bg-success px-2 py-1">成功</span>
+                        {% elif task.status == 'failed' %}
+                            <span class="badge bg-danger px-2 py-1">失败</span>
+                        {% else %}
+                            <span class="badge bg-secondary px-2 py-1">{{ task.status }}</span>
+                        {% endif %}
+                    </dd>
+
+                    {% if task.finish_time %}
+                    <dt class="col-sm-3 text-dark">完成时间</dt>
+                    <dd class="col-sm-9">{{ task.finish_time|date:"Y-m-d H:i:s" }}</dd>
+                    {% endif %}
+
+                    {% if task.result %}
+                    <dt class="col-sm-3 text-dark mt-3">执行日志</dt>
+                    <dd class="col-sm-9 mt-3">
+                        <div class="bg-dark text-light p-3 rounded" style="font-family: monospace; white-space: pre-wrap; font-size: 0.875rem;">{% if task.status == 'failed' %}<span class="text-danger">{{ task.result }}</span>{% else %}{{ task.result }}{% endif %}</div>
+                    </dd>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

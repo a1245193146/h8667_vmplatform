@@ -57,6 +57,28 @@ ANSIBLE_CONFIG = {
     'windows_list': 'inventory.d/windows_dynamic.ini',
     'INVENTORY': 'hosts',
 }
+
+# Windows 服务器授权登录（AD 域控）配置
+AD_CONFIG = {
+    'DOMAIN': 'hp4307.com',
+    'NETBIOS': 'hp4307',
+    'USERNAME': 'hp4307\\bakadmin',
+    'PASSWORD': '1qazxsw@',
+    'SEARCH_BASE': 'DC=HP4307,DC=com',
+    # 文件日志目录（与原运维脚本保持一致）
+    'LOG_DIR': r'D:\logs\ywops\server',
+}
+
+# 设置受信任站点（WinRM + 组策略 GPO）配置
+TRUST_SITE_CONFIG = {
+    'HOST': '192.168.2.86',
+    'NETBIOS': 'hp4307',
+    'USERNAME': 'bakadmin',
+    'PASSWORD': '1qazxsw@',
+    # 文件日志目录（与原运维脚本保持一致）
+    'LOG_DIR': r'D:\logs\ywops\trust_site',
+}
+
 # Application definition
 
 INSTALLED_APPS = [
