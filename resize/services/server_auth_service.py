@@ -116,7 +116,7 @@ def get_user_dn(account):
         if not conn.entries:
             err = '输入的用户名可能有误，请查询后再重新输入'
             return None, conn, err
-        user_dn = conn.entries[0].distinguishedName
+        user_dn = conn.entries[0].entry_dn
         return user_dn, conn, err
     except Exception:
         err = '输入的用户名可能有误，请查询后再重新输入'
@@ -137,9 +137,21 @@ def search_workstation(machinenames, account):
         return None, 'AD 连接失败'
 
     try:
+        from ldap3 import BASE
+
+        # 以用户对象 DN 为基、BASE 范围精确读取该用户的 userWorkstations
         conn.search(
-            str(user_dn), '(objectClass=*)', attributes=[workstations_attr]
+            user_dn,
+            '(objectClass=*)',
+            search_scope=BASE,
+            attributes=[workstations_attr],
         )
+
+        # 未读到用户对象，避免 conn.entries[0] 越界
+        if not conn.entries:
+            conn.unbind()
+            return None, '未找到用户对象，无法读取工作站登录权限'
+
         workstation_value = conn.entries[0][workstations_attr]
 
         # 为空表示可登录所有计算机，无需修改
@@ -155,7 +167,7 @@ def search_workstation(machinenames, account):
             ]
         }
 
-        if not conn.modify(str(user_dn), modify_attrs):
+        if not conn.modify(user_dn, modify_attrs):
             err = f'修改 userWorkstations 失败: {conn.result}'
 
         conn.unbind()
