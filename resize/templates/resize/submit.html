@@ -3,11 +3,19 @@
 {% block title %}提交申请 - 虚拟机磁盘扩容平台{% endblock %}
 
 {% block content %}
-<div class="card shadow-sm max-w-lg mx-auto" style="max-width: 800px;">
-    <div class="card-header bg-white">
-        <h4 class="mb-0">提交扩容申请</h4>
+<div class="card max-w-lg mx-auto" style="max-width: 820px;">
+    <div class="card-header py-3">
+        <h4 class="mb-0 fw-bold">提交扩容申请</h4>
     </div>
-    <div class="card-body">
+    <div class="card-body p-4">
+
+        <!-- 步骤化引导 -->
+        <div class="step-guide">
+            <div class="step-item active" id="step1"><span class="step-num">1</span>输入 IP 查询</div>
+            <div class="step-item" id="step2"><span class="step-num">2</span>选择磁盘</div>
+            <div class="step-item" id="step3"><span class="step-num">3</span>填写容量与原因</div>
+        </div>
+
         <form id="submitForm" method="POST" action="{% url 'submit' %}">
             {% csrf_token %}
             <div class="mb-4">
@@ -34,7 +42,13 @@
                 <div class="mb-3">
                     <label for="add_size" class="form-label fw-bold">扩容大小 (GB)</label>
                     <input type="number" class="form-control" id="add_size" name="add_size" min="1" max="500" required>
-                    <div class="form-text" id="autoApproveHint">单次扩容 &lt; 200GB 将自动审批。</div>
+                    <div class="form-text" id="autoApproveHint">单次扩容 &lt; 200GB 且存储充足将自动审批执行；否则需管理员审批。</div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="id_drive_letter" class="form-label fw-bold">盘符 <span class="text-muted fw-normal small">（选填）</span></label>
+                    <input type="text" class="form-control" id="id_drive_letter" name="drive_letter" maxlength="1" placeholder="选填，如 D" style="max-width: 140px;">
+                    <div class="form-text">多磁盘机器建议填写，将传给 Ansible 精准扩容分区。</div>
                 </div>
 
                 <div class="mb-4">
@@ -61,26 +75,52 @@ document.addEventListener('DOMContentLoaded', function() {
     const diskSelect = document.getElementById('diskSelect');
     const addSizeInput = document.getElementById('add_size');
     const autoApproveHint = document.getElementById('autoApproveHint');
+    const driveLetterInput = document.getElementById('id_drive_letter');
+    const submitForm = document.getElementById('submitForm');
+    const btnSubmit = document.getElementById('btnSubmit');
 
     // Hidden form inputs
     const hiddenDiskKey = document.getElementById('disk_key');
     const hiddenDiskLabel = document.getElementById('disk_label');
     const hiddenCurrentSize = document.getElementById('current_size');
 
-    // Dynamically update auto-approve hint
-    addSizeInput.addEventListener('input', function() {
-        const size = parseInt(this.value);
-        if (size && size < 200) {
-            autoApproveHint.className = 'form-text text-success';
-            autoApproveHint.textContent = '当前申请容量 < 200GB，将自动审批执行。';
-        } else if (size >= 200) {
+    // Step guide helpers
+    function setStep(n) {
+        for (let i = 1; i <= 3; i++) {
+            document.getElementById('step' + i).classList.toggle('active', i <= n);
+        }
+    }
+
+    // 盘符输入自动转大写，仅保留单字符
+    driveLetterInput.addEventListener('input', function() {
+        this.value = this.value.trim().toUpperCase().slice(0, 1);
+    });
+
+    // Dynamically update auto-approve hint (按申请容量 + 存储空间判断)
+    function updateAutoApproveHint() {
+        const size = parseInt(addSizeInput.value);
+        const selected = diskSelect.options[diskSelect.selectedIndex];
+        const free = selected && selected.dataset.free ? parseInt(selected.dataset.free) : null;
+
+        if (!size) {
+            autoApproveHint.className = 'form-text';
+            autoApproveHint.textContent = '单次扩容 < 200GB 且存储充足将自动审批执行；否则需管理员审批。';
+            return;
+        }
+        if (free !== null && size + 100 > free) {
+            autoApproveHint.className = 'form-text text-warning fw-bold';
+            autoApproveHint.textContent = '存储空间可能不足（该盘所在 datastore 剩余 ' + free + ' GB，需预留 100 GB），将转人工审批。';
+            return;
+        }
+        if (size >= 200) {
             autoApproveHint.className = 'form-text text-warning';
             autoApproveHint.textContent = '当前申请容量 >= 200GB，需要管理员手动审批。';
         } else {
-            autoApproveHint.className = 'form-text';
-            autoApproveHint.textContent = '单次扩容 < 200GB 将自动审批。';
+            autoApproveHint.className = 'form-text text-success';
+            autoApproveHint.textContent = '当前申请容量 < 200GB 且存储充足，将自动审批执行。';
         }
-    });
+    }
+    addSizeInput.addEventListener('input', updateAutoApproveHint);
 
     btnQuery.addEventListener('click', async function() {
         const ip = ipInput.value.trim();
@@ -90,7 +130,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         btnQuery.disabled = true;
-        btnQuery.textContent = '查询中...';
+        btnQuery.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>查询中...';
         stateWarning.innerHTML = '';
         diskSelect.innerHTML = '<option value="">请选择磁盘...</option>';
 
@@ -117,17 +157,19 @@ document.addEventListener('DOMContentLoaded', function() {
                     option.value = disk.disk_key;
                     option.dataset.label = disk.label;
                     option.dataset.size = disk.size_gb;
-                    
+                    option.dataset.free = disk.free_space_gb;
+
                     const label = disk.label;
                     const scsi = disk.scsi_id;
                     const size = disk.size_gb;
                     const ds = disk.datastore;
                     const free = disk.free_space_gb;
-                    
+
                     option.textContent = `${label} (SCSI ${scsi}) - ${size} GB [datastore: ${ds}, 剩余: ${free} GB]`;
                     diskSelect.appendChild(option);
                 });
                 diskGroup.style.display = 'block';
+                setStep(2);
             } else {
                 stateWarning.innerHTML = '<div class="alert alert-info py-2 shadow-sm">未查询到可用磁盘。</div>';
                 diskGroup.style.display = 'none';
@@ -147,11 +189,20 @@ document.addEventListener('DOMContentLoaded', function() {
             hiddenDiskKey.value = selected.value;
             hiddenDiskLabel.value = selected.dataset.label;
             hiddenCurrentSize.value = selected.dataset.size;
+            setStep(3);
         } else {
             hiddenDiskKey.value = '';
             hiddenDiskLabel.value = '';
             hiddenCurrentSize.value = '';
+            setStep(2);
         }
+        updateAutoApproveHint();
+    });
+
+    // 提交按钮 loading 态，防重复提交
+    submitForm.addEventListener('submit', function() {
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>提交中，请稍候...';
     });
 });
 </script>

@@ -3,17 +3,22 @@
 {% block title %}审批管理 - 虚拟机磁盘扩容平台{% endblock %}
 
 {% block content %}
-<div class="card shadow-sm border-danger border-opacity-25">
-    <div class="card-header bg-white py-3">
-        <h4 class="mb-0 text-danger fw-bold"><i class="bi bi-shield-lock"></i> 待审批申请</h4>
+<div class="card">
+    <div class="card-header py-3 d-flex justify-content-between align-items-center">
+        <h4 class="mb-0 text-danger fw-bold">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16" style="vertical-align: -3px;"><path d="M5.338 1.59a61.44 61.44 0 0 0-2.978.872.75.75 0 0 0-.55.79v8.5a.75.75 0 0 0 .55.79 62.54 62.54 0 0 0 5.14 1.468.75.75 0 0 0 .5 0 62.54 62.54 0 0 0 5.14-1.468.75.75 0 0 0 .55-.79v-8.5a.75.75 0 0 0-.55-.79 61.44 61.44 0 0 0-2.978-.872A12.6 12.6 0 0 0 8 1.25c-.889 0-1.772.112-2.662.34zM10.854 5.146a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708 0l-1.5-1.5a.5.5 0 1 1 .708-.708L7.5 7.793l2.646-2.647a.5.5 0 0 1 .708 0z"/></svg>
+            待审批申请
+        </h4>
+        <span class="text-muted small">暖色高亮行表示单次扩容 ≥ 200GB，需重点关注</span>
     </div>
     <div class="card-body p-0 table-responsive">
         <table class="table table-striped table-hover mb-0 align-middle">
-            <thead class="table-light">
+            <thead class="table-warm">
                 <tr>
                     <th>申请人</th>
                     <th>IP地址</th>
-                    <th>磁盘标签</th>
+                    <th>磁盘</th>
+                    <th>存储</th>
                     <th>扩容大小</th>
                     <th style="max-width: 250px;">申请原因</th>
                     <th>申请时间</th>
@@ -22,11 +27,20 @@
             </thead>
             <tbody>
                 {% for task in tasks %}
-                <tr>
+                <tr{% if task.add_size >= 200 %} class="row-attention" title="单次扩容 ≥ 200GB，请重点关注存储容量与业务影响"{% endif %}>
                     <td class="fw-medium">{{ task.applicant }}</td>
                     <td>{{ task.vm_ip }}</td>
-                    <td>{{ task.disk_label|default:task.drive_letter }}</td>
-                    <td><span class="fw-bold text-success">+{{ task.add_size }} GB</span></td>
+                    <td>{{ task.disk_label|default:'-' }}</td>
+                    <td class="small">
+                        <div>{{ task.datastore_name|default:'-' }}</div>
+                        <div class="text-muted">剩余 {{ task.datastore_free_gb|default:'-' }} GB</div>
+                    </td>
+                    <td>
+                        <span class="fw-bold text-success">+{{ task.add_size }} GB</span>
+                        {% if task.add_size >= 200 %}
+                        <span class="badge bg-warning text-dark ms-1">大额</span>
+                        {% endif %}
+                    </td>
                     <td class="text-truncate text-muted" style="max-width: 250px;" title="{{ task.reason }}">{{ task.reason }}</td>
                     <td class="text-muted small">{{ task.create_time|date:"Y-m-d H:i" }}</td>
                     <td class="text-end px-4">
@@ -48,7 +62,7 @@
                                             <h5 class="modal-title text-danger fw-bold">填写驳回原因</h5>
                                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                         </div>
-                                        <div class="modal-body bg-light">
+                                        <div class="modal-body" style="background-color: var(--vmp-bg);">
                                             <textarea class="form-control" name="reject_reason" rows="4" required placeholder="请详细说明驳回原因，申请人将能看到此内容..."></textarea>
                                         </div>
                                         <div class="modal-footer border-top-0">
@@ -63,10 +77,11 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="7" class="text-center py-5 text-muted fs-5">
-                        <div class="my-4">
-                            <span class="d-block mb-2 fs-1">🎉</span>
-                            暂无待审批申请
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" fill="currentColor" viewBox="0 0 16 16" class="mb-3" style="color: #a8c69f;"><path d="M10.067.87a2.89 2.89 0 0 0-4.134 0l-.622.638-.89-.011a2.89 2.89 0 0 0-2.924 2.924l.01.89-.636.622a2.89 2.89 0 0 0 0 4.134l.637.622-.011.89a2.89 2.89 0 0 0 2.924 2.924l.89-.01.622.636a2.89 2.89 0 0 0 4.134 0l.622-.637.89.011a2.89 2.89 0 0 0 2.924-2.924l-.01-.89.636-.622a2.89 2.89 0 0 0 0-4.134l-.637-.622.011-.89a2.89 2.89 0 0 0-2.924-2.924l-.89.01-.622-.636zM8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg>
+                            <div class="fs-5">暂无待审批申请</div>
+                            <div class="small mt-1">所有申请均已处理完毕</div>
                         </div>
                     </td>
                 </tr>
@@ -74,5 +89,30 @@
             </tbody>
         </table>
     </div>
+    {% if tasks.paginator.num_pages > 1 %}
+    <div class="card-footer bg-transparent border-top-0 py-3">
+        <nav aria-label="待审批分页">
+            <ul class="pagination justify-content-center mb-0">
+                {% if tasks.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ tasks.previous_page_number }}">上一页</a>
+                </li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link">上一页</span></li>
+                {% endif %}
+                <li class="page-item disabled">
+                    <span class="page-link">第 {{ tasks.number }} / {{ tasks.paginator.num_pages }} 页</span>
+                </li>
+                {% if tasks.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ tasks.next_page_number }}">下一页</a>
+                </li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link">下一页</span></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

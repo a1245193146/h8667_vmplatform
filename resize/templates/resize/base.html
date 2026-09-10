@@ -6,15 +6,12 @@
     <title>{% block title %}虚拟机磁盘扩容平台{% endblock %}</title>
     {% load static %}
     <link href="{% static 'resize/css/bootstrap.min.css' %}" rel="stylesheet">
-    <style>
-        body { background-color: #f8f9fa; min-height: 100vh; display: flex; flex-direction: column; }
-        main { flex: 1; }
-    </style>
+    <link href="{% static 'resize/css/custom.css' %}" rel="stylesheet">
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 shadow-sm">
+    <nav class="navbar navbar-expand-lg navbar-light navbar-warm mb-4">
         <div class="container">
-            <a class="navbar-brand fw-bold" href="{% url 'index' %}">VM扩容平台</a>
+            <a class="navbar-brand" href="{% url 'index' %}"><span class="brand-dot"></span>VM扩容平台</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
@@ -34,7 +31,7 @@
                     </li>
                     {% endif %}
                     <!-- 域名管理 -->
-                    <li class="nav-item"><span class="nav-link text-secondary disabled px-1">|</span></li>
+                    <li class="nav-item"><span class="nav-link nav-divider disabled px-1">|</span></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'domain_submit' %}">申请域名</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'domain_history' %}">域名记录</a></li>
                     {% if is_admin %}
@@ -48,21 +45,22 @@
                     </li>
                     {% endif %}
                     <!-- 服务器授权登录 -->
-                    <li class="nav-item"><span class="nav-link text-secondary disabled px-1">|</span></li>
+                    <li class="nav-item"><span class="nav-link nav-divider disabled px-1">|</span></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'server_auth_submit' %}">服务器授权</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'server_auth_history' %}">授权记录</a></li>
                     <!-- 受信任站点 -->
-                    <li class="nav-item"><span class="nav-link text-secondary disabled px-1">|</span></li>
+                    <li class="nav-item"><span class="nav-link nav-divider disabled px-1">|</span></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'trust_site_submit' %}">受信任站点</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'trust_site_history' %}">站点记录</a></li>
                 </ul>
                 <ul class="navbar-nav">
                     {% if is_authenticated %}
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle text-light" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-person-circle"></i> {{ sso_username }}
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" class="me-1" style="vertical-align: -2px;"><path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm4 8c0 1-1 1-1 1H3s-1 0-1-1 1-4 6-4 6 3 6 4zm-1-.004c-.001-.246-.154-.986-.832-1.664C11.516 10.68 10.289 10 8 10c-2.29 0-3.516.68-4.168 1.332-.678.678-.83 1.418-.832 1.664h10z"/></svg>
+                            {{ sso_username }}
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-end shadow-lg">
+                        <ul class="dropdown-menu dropdown-menu-end shadow">
                             <li class="px-3 py-2 border-bottom">
                                 <small class="text-muted">当前用户：</small>
                                 <strong>{{ sso_username }}</strong>
@@ -72,13 +70,16 @@
                             {% endif %}
                             <li><hr class="dropdown-divider"></li>
                             <li>
-                                <a class="dropdown-item text-danger" href="javascript:void(0);" onclick="doLogout()"><i class="bi bi-box-arrow-right"></i> 退出登录</a>
+                                <a class="dropdown-item text-danger" href="javascript:void(0);" onclick="doLogout()">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16" class="me-1" style="vertical-align: -2px;"><path fill-rule="evenodd" d="M10 12.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 .5.5v2a.5.5 0 0 0 1 0v-2A1.5 1.5 0 0 0 9.5 2h-8A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h8a1.5 1.5 0 0 0 1.5-1.5v-2a.5.5 0 0 0-1 0v2z"/><path fill-rule="evenodd" d="M15.854 8.354a.5.5 0 0 0 0-.708l-3-3a.5.5 0 0 0-.708.708L14.293 7.5H5.5a.5.5 0 0 0 0 1h8.793l-2.147 2.146a.5.5 0 0 0 .708.708l3-3z"/></svg>
+                                    退出登录
+                                </a>
                             </li>
                         </ul>
                     </li>
                     {% else %}
                     <li class="nav-item">
-                        <a class="nav-link text-light" href="{% url 'logout' %}">登录/退出</a>
+                        <a class="nav-link" href="{% url 'logout' %}">登录/退出</a>
                     </li>
                     {% endif %}
                 </ul>
@@ -99,9 +100,9 @@
         {% block content %}{% endblock %}
     </main>
 
-    <footer class="bg-light text-center py-3 mt-4 border-top">
-        <div class="container text-muted small">
-            虚拟机磁盘扩容平台 v2.0
+    <footer class="footer-warm text-center py-3 mt-5">
+        <div class="container small">
+            虚拟机磁盘扩容平台 v2.0 · 内网虚拟化运维
         </div>
     </footer>
 
@@ -109,7 +110,7 @@
     <script>
         function doLogout() {
             if (!confirm('确定要退出登录吗？')) return;
-            
+
             fetch('{% url "sso_logout_init" %}', {
                 method: 'GET',
                 credentials: 'same-origin'
