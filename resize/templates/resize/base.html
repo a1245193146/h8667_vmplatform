@@ -3,55 +3,103 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}虚拟机磁盘扩容平台{% endblock %}</title>
+    <title>{% block title %}信息系统运维平台{% endblock %}</title>
     {% load static %}
     <link href="{% static 'resize/css/bootstrap.min.css' %}" rel="stylesheet">
     <link href="{% static 'resize/css/custom.css' %}" rel="stylesheet">
+    <style>
+        /* 下拉菜单延续低饱和暖色主题 */
+        .navbar-warm .dropdown-menu {
+            background-color: var(--vmp-surface);
+            border: 1px solid var(--vmp-border);
+            border-radius: var(--vmp-radius);
+            box-shadow: var(--vmp-shadow-hover);
+        }
+        .navbar-warm .dropdown-item:hover,
+        .navbar-warm .dropdown-item:focus {
+            background-color: var(--vmp-accent-soft);
+            color: var(--vmp-accent-dark);
+        }
+        .navbar-warm .dropdown-divider { border-top-color: var(--vmp-border); }
+    </style>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-light navbar-warm mb-4">
         <div class="container">
-            <a class="navbar-brand" href="{% url 'index' %}"><span class="brand-dot"></span>VM扩容平台</a>
+            <a class="navbar-brand" href="{% url 'index' %}"><span class="brand-dot"></span>信息系统运维平台</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item"><a class="nav-link" href="{% url 'index' %}">首页</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'submit' %}">提交申请</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'history' %}">历史记录</a></li>
-                    {% if is_admin %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'admin_pending' %}">
-                            审批管理
-                            {% if pending_count and pending_count > 0 %}
+                    <!-- 磁盘扩容 -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            磁盘扩容
+                            {% if is_admin and pending_count and pending_count > 0 %}
                             <span class="badge bg-danger rounded-pill">{{ pending_count }}</span>
                             {% endif %}
                         </a>
+                        <ul class="dropdown-menu shadow">
+                            <li><a class="dropdown-item" href="{% url 'submit' %}">提交申请</a></li>
+                            <li><a class="dropdown-item" href="{% url 'history' %}">历史记录</a></li>
+                            {% if is_admin %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'admin_pending' %}">
+                                    审批管理
+                                    {% if pending_count and pending_count > 0 %}
+                                    <span class="badge bg-danger rounded-pill">{{ pending_count }}</span>
+                                    {% endif %}
+                                </a>
+                            </li>
+                            {% endif %}
+                        </ul>
                     </li>
-                    {% endif %}
                     <!-- 域名管理 -->
-                    <li class="nav-item"><span class="nav-link nav-divider disabled px-1">|</span></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'domain_submit' %}">申请域名</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'domain_history' %}">域名记录</a></li>
-                    {% if is_admin %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'domain_admin_pending' %}">
-                            域名审批
-                            {% if domain_pending_count and domain_pending_count > 0 %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            域名管理
+                            {% if is_admin and domain_pending_count and domain_pending_count > 0 %}
                             <span class="badge bg-warning text-dark rounded-pill">{{ domain_pending_count }}</span>
                             {% endif %}
                         </a>
+                        <ul class="dropdown-menu shadow">
+                            <li><a class="dropdown-item" href="{% url 'domain_submit' %}">申请域名</a></li>
+                            <li><a class="dropdown-item" href="{% url 'domain_history' %}">域名记录</a></li>
+                            {% if is_admin %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'domain_admin_pending' %}">
+                                    域名审批
+                                    {% if domain_pending_count and domain_pending_count > 0 %}
+                                    <span class="badge bg-warning text-dark rounded-pill">{{ domain_pending_count }}</span>
+                                    {% endif %}
+                                </a>
+                            </li>
+                            {% endif %}
+                        </ul>
                     </li>
-                    {% endif %}
-                    <!-- 服务器授权登录 -->
-                    <li class="nav-item"><span class="nav-link nav-divider disabled px-1">|</span></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'server_auth_submit' %}">服务器授权</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'server_auth_history' %}">授权记录</a></li>
-                    <!-- 受信任站点 -->
-                    <li class="nav-item"><span class="nav-link nav-divider disabled px-1">|</span></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'trust_site_submit' %}">受信任站点</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'trust_site_history' %}">站点记录</a></li>
+                    <!-- 服务器工具 -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">服务器工具</a>
+                        <ul class="dropdown-menu shadow">
+                            <li><a class="dropdown-item" href="{% url 'server_auth_submit' %}">服务器授权</a></li>
+                            <li><a class="dropdown-item" href="{% url 'server_auth_history' %}">授权记录</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'trust_site_submit' %}">受信任站点</a></li>
+                            <li><a class="dropdown-item" href="{% url 'trust_site_history' %}">站点记录</a></li>
+                        </ul>
+                    </li>
+                    <!-- 变更管理 -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">变更管理</a>
+                        <ul class="dropdown-menu shadow">
+                            <li><a class="dropdown-item" href="{% url 'change_submit' %}">变更申请</a></li>
+                            <li><a class="dropdown-item" href="{% url 'change_list' %}">变更记录</a></li>
+                        </ul>
+                    </li>
                 </ul>
                 <ul class="navbar-nav">
                     {% if is_authenticated %}
@@ -102,7 +150,7 @@
 
     <footer class="footer-warm text-center py-3 mt-5">
         <div class="container small">
-            虚拟机磁盘扩容平台 v2.0 · 内网虚拟化运维
+            信息系统运维平台 v3.0 · 内网虚拟化运维
         </div>
     </footer>
 
