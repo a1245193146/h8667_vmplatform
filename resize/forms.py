@@ -1,5 +1,6 @@
 from django import forms
 from .models import DiskResizeTask, DomainTask, ServerAuthTask, TrustSiteTask
+from .services.vc_service import MAX_ADD_GB
 
 
 class DiskResizeForm(forms.ModelForm):
@@ -13,6 +14,7 @@ class DiskResizeForm(forms.ModelForm):
             'disk_label',
             'current_size',
             'add_size',
+            'drive_letter',
             'reason',
         ]
 
@@ -36,12 +38,41 @@ class DiskResizeForm(forms.ModelForm):
                 'max': 500,
             }),
 
+            'drive_letter': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': '选填，如 D',
+                'maxlength': 1,
+                'id': 'id_drive_letter',
+            }),
+
             'reason': forms.Textarea(attrs={
                 'class': 'form-control',
                 'rows': 3,
                 'placeholder': '请说明扩容原因',
             }),
         }
+
+    def clean_drive_letter(self):
+        value = (
+            self.cleaned_data.get('drive_letter', '')
+            .strip().upper()
+        )
+        if value:
+            if len(value) != 1 or not ('A' <= value <= 'Z'):
+                raise forms.ValidationError(
+                    '盘符必须是单个字母，如 D'
+                )
+        return value
+
+    def clean_add_size(self):
+        value = self.cleaned_data.get('add_size')
+        if value is None:
+            return value
+        if value < 1 or value > MAX_ADD_GB:
+            raise forms.ValidationError(
+                f'扩容大小必须在 1-{MAX_ADD_GB} GB 之间'
+            )
+        return value
 
 
 class DomainForm(forms.ModelForm):

@@ -1,5 +1,8 @@
 import json
+import logging
 
+from django.contrib import messages
+from django.core.paginator import Paginator
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.utils import timezone
@@ -19,10 +22,9 @@ from .sso_utils import (
     get_sso_username,
     is_admin,
 )
-from .services.vc_service import (
-    get_vm_disk_list,
-    check_vm_status,
-)
+from .services import vc_service
+
+logger = logging.getLogger(__name__)
 
 @sso_require_login(sso_verify_type="normal", response_type="html")
 # @sso_required
@@ -45,8 +47,53 @@ def submit_resize(request):
             task = form.save(commit=False)
             task.applicant = get_sso_username(request)
 
-            # 虚拟机磁盘 <=200GB: 自动审批并立即异步执行
-            if not task.needs_approval:
+            # 防篡改重查: disk_key/current_size 为隐藏字段可篡改，
+            # 提交时后端重新查询 vCenter，用真实数据覆盖
+            try:
+
+                vm_info = vc_service.get_vm_info(task.vm_ip)
+
+                disk = None
+                for d in vm_info['disks']:
+                    if d['disk_key'] == task.disk_key:
+                        disk = d
+                        break
+
+                if disk is None:
+                    raise Exception(
+                        f'未找到所选磁盘: {task.disk_key}，'
+                        f'请重新查询后选择'
+                    )
+
+            except Exception as e:
+                form.add_error(None, str(e))
+                return render(request, 'resize/submit.html', {
+                    'form': form,
+                })
+
+            task.current_size = disk['size_gb']
+            task.disk_label = disk['label']
+            task.datastore_name = disk['datastore']
+            task.datastore_free_gb = disk['free_space_gb']
+
+            # 快照拦截: 不落库（执行层仍保留兜底检查）
+            if vm_info['has_snapshot']:
+                form.add_error(
+                    None,
+                    '该虚拟机存在快照，无法在原磁盘扩容。'
+                    '请先删除快照后重试。'
+                )
+                return render(request, 'resize/submit.html', {
+                    'form': form,
+                })
+
+            # 自动审批判定: 申请容量 < 200GB 且存储空间充足
+            storage_ok = (
+                disk['free_space_gb']
+                >= task.add_size + vc_service.SAFE_RESERVED_GB
+            )
+
+            if not task.needs_approval and storage_ok:
 
                 task.approval_status = 'auto_approved'
                 task.approved_by = 'system'
@@ -55,11 +102,22 @@ def submit_resize(request):
                 task.save()
 
                 # 需求 #3: 异步执行
-                execute_resize_task.delay(task.id)
+                try:
+                    execute_resize_task.delay(task.id)
+                except Exception:
+                    logger.exception(
+                        f'任务队列不可用: task_id={task.id}'
+                    )
+                    task.status = 'failed'
+                    task.result = '任务队列不可用，请联系管理员'
+                    task.save()
+                    messages.error(
+                        request, '任务队列不可用，请联系管理员'
+                    )
 
                 return redirect('history')
 
-            # 虚拟机磁盘 >200GB: 进入人工审批
+            # 申请容量 >=200GB 或存储不足: 进入人工审批
             task.approval_status = 'pending'
             task.status = 'pending_approval'
             task.save()
@@ -80,11 +138,14 @@ def history(request):
     """扩容历史记录"""
 
     if is_admin(request):
-        tasks = DiskResizeTask.objects.all()
+        task_list = DiskResizeTask.objects.all()
     else:
-        tasks = DiskResizeTask.objects.filter(
+        task_list = DiskResizeTask.objects.filter(
             applicant=get_sso_username(request)
         )
+
+    paginator = Paginator(task_list, 20)
+    tasks = paginator.get_page(request.GET.get('page'))
 
     return render(request, 'resize/history.html', {
         'tasks': tasks,
@@ -108,9 +169,12 @@ def detail(request, task_id):
 def admin_pending(request):
     """管理员审批列表"""
 
-    tasks = DiskResizeTask.objects.filter(
+    task_list = DiskResizeTask.objects.filter(
         approval_status='pending'
     )
+
+    paginator = Paginator(task_list, 20)
+    tasks = paginator.get_page(request.GET.get('page'))
 
     return render(request, 'resize/admin_pending.html', {
         'tasks': tasks,
@@ -127,9 +191,8 @@ def admin_approve(request, task_id):
     )
 
     if task.approval_status != 'pending':
-        return JsonResponse(
-            {'error': '该申请已处理'}, status=400
-        )
+        messages.warning(request, '该申请已处理')
+        return redirect('admin_pending')
 
     task.approval_status = 'approved'
     task.approved_by = get_sso_username(request)
@@ -138,7 +201,18 @@ def admin_approve(request, task_id):
     task.save()
 
     # 需求 #3: 批准后异步执行
-    execute_resize_task.delay(task.id)
+    try:
+        execute_resize_task.delay(task.id)
+    except Exception:
+        logger.exception(
+            f'任务队列不可用: task_id={task.id}'
+        )
+        task.status = 'failed'
+        task.result = '任务队列不可用，请联系管理员'
+        task.save()
+        messages.error(
+            request, '任务队列不可用，请联系管理员'
+        )
 
     return redirect('admin_pending')
 
@@ -153,9 +227,8 @@ def admin_reject(request, task_id):
     )
 
     if task.approval_status != 'pending':
-        return JsonResponse(
-            {'error': '该申请已处理'}, status=400
-        )
+        messages.warning(request, '该申请已处理')
+        return redirect('admin_pending')
 
     reject_reason = request.POST.get(
         'reject_reason', ''
@@ -177,6 +250,8 @@ def api_vm_disks(request):
 
     需求 #6: 解决同大小磁盘无法区分问题。
     GET /api/vm-disks/?ip=x.x.x.x
+
+    单次 vCenter 连接（get_vm_info）返回磁盘与状态。
     """
 
     vm_ip = request.GET.get('ip', '').strip()
@@ -188,12 +263,15 @@ def api_vm_disks(request):
 
     try:
 
-        disks = get_vm_disk_list(vm_ip)
-        vm_status = check_vm_status(vm_ip)
+        info = vc_service.get_vm_info(vm_ip)
 
         return JsonResponse({
-            'disks': disks,
-            'vm_status': vm_status,
+            'disks': info['disks'],
+            'vm_status': {
+                'has_snapshot': info['has_snapshot'],
+                'power_state': info['power_state'],
+                'vm_name': info['vm_name'],
+            },
         })
 
     except Exception as e:
@@ -201,6 +279,40 @@ def api_vm_disks(request):
         return JsonResponse(
             {'error': str(e)}, status=500
         )
+
+
+@sso_required
+def api_task_status(request, task_id):
+    """AJAX 接口: 任务状态轮询。
+
+    GET /api/task/<task_id>/status/
+    仅任务申请人本人或管理员可见。
+    """
+
+    task = get_object_or_404(
+        DiskResizeTask, id=task_id
+    )
+
+    if (
+        task.applicant != get_sso_username(request)
+        and not is_admin(request)
+    ):
+        return JsonResponse(
+            {'error': '无权限'}, status=403
+        )
+
+    finish_time = None
+    if task.finish_time:
+        finish_time = timezone.localtime(
+            task.finish_time
+        ).strftime('%Y-%m-%d %H:%M:%S')
+
+    return JsonResponse({
+        'status': task.status,
+        'status_display': task.get_status_display(),
+        'result': task.result or '',
+        'finish_time': finish_time,
+    })
 
 
 def sso_logout_init(request):
@@ -390,7 +502,15 @@ def domain_admin_approve(request, task_id):
     task.status = 'pending'
     task.save()
 
-    execute_domain_task.delay(task.id)
+    try:
+        execute_domain_task.delay(task.id)
+    except Exception:
+        logger.exception(
+            f'任务队列不可用: task_id={task.id}'
+        )
+        messages.error(
+            request, '任务队列不可用，请联系管理员'
+        )
 
     return redirect('domain_admin_pending')
 

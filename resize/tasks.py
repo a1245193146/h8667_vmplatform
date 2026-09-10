@@ -1,4 +1,6 @@
 # pyright: reportAttributeAccessIssue=false
+import logging
+
 from celery import shared_task
 from django.utils import timezone
 
@@ -19,9 +21,11 @@ from .services.server_auth_service import execute_server_auth
 
 from .services.trust_site_service import execute_trust_site
 
+logger = logging.getLogger(__name__)
 
-@shared_task
-def execute_resize_task(task_id):
+
+@shared_task(bind=True, max_retries=20)
+def execute_resize_task(self, task_id):
     """Celery 异步执行磁盘扩容。
 
     流程:
@@ -29,39 +33,74 @@ def execute_resize_task(task_id):
        - 自动检查快照 (#8)
        - 自动检查存储空间 (#4)
        - 通过 disk_key 精确匹配磁盘 (#6)
-       - 返回消息含关机提示 (#7)
+       - 返回 dict，含 power_state (#7)
     2. 若 VM 在线: ansible 扩容文件系统
     3. 若 VM 关机: 跳过 ansible，提示手动扩容
+
+    并发守卫: 同一 VM 已有 running 任务时，
+    30 秒后重试等待对方完成。
     """
 
-    task = DiskResizeTask.objects.get(
-        id=task_id
-    )
+    try:
+        task = DiskResizeTask.objects.get(
+            id=task_id
+        )
+    except DiskResizeTask.DoesNotExist:
+        logger.error(
+            f'扩容任务不存在，放弃执行: id={task_id}'
+        )
+        return
+
+    # 并发守卫: 同 VM 不允许并行扩容
+    conflict = DiskResizeTask.objects.filter(
+        vm_ip=task.vm_ip,
+        status='running'
+    ).exclude(id=task.id).exists()
+
+    if conflict:
+        logger.info(
+            f'VM {task.vm_ip} 存在执行中的扩容任务，'
+            f'30秒后重试: task_id={task_id}'
+        )
+        raise self.retry(countdown=30)
+
+    task.status = 'running'
+    task.save()
 
     try:
 
-        task.status = 'running'
-        task.save()
-
-        vc_message = resize_vm_disk(
+        vc_result = resize_vm_disk(
             vm_ip=task.vm_ip,
             disk_key=task.disk_key,
             add_size=task.add_size
         )
 
-        # 需求 #7: 关机 VM 只扩 vCenter 磁盘
-        # 不执行 ansible 文件系统扩容
-        if '关机状态' in vc_message:
+    except Exception as e:
 
-            task.status = 'success'
-            task.result = vc_message
-            task.finish_time = timezone.now()
-            task.save()
-            return
+        task.status = 'failed'
+        task.result = str(e)
+        task.finish_time = timezone.now()
+        task.save()
+        return
 
-        # VM 在线，执行 ansible 文件系统扩容
+    vc_message = vc_result['message']
+
+    # 需求 #7: 关机 VM 只扩 vCenter 磁盘
+    # 不执行 ansible 文件系统扩容
+    if vc_result['power_state'] != 'poweredOn':
+
+        task.status = 'success'
+        task.result = vc_message
+        task.finish_time = timezone.now()
+        task.save()
+        return
+
+    # VM 在线，执行 ansible 文件系统扩容
+    try:
+
         ansible_result = resize_windows_partition(
             vm_ip=task.vm_ip,
+            drive_letter=task.drive_letter or ''
         )
 
         task.status = 'success'
@@ -72,8 +111,13 @@ def execute_resize_task(task_id):
 
     except Exception as e:
 
+        # vCenter 磁盘已扩成功，仅文件系统扩容失败，
+        # result 中必须保留 vCenter 已成功的事实
         task.status = 'failed'
-        task.result = str(e)
+        task.result = (
+            f'{vc_message}，'
+            f'但文件系统扩容失败：{e}'
+        )
 
     task.finish_time = timezone.now()
     task.save()
@@ -88,9 +132,15 @@ def execute_domain_task(task_id):
     2. 记录各步骤状态到 result 字段
     """
 
-    task = DomainTask.objects.get(
-        id=task_id
-    )
+    try:
+        task = DomainTask.objects.get(
+            id=task_id
+        )
+    except DomainTask.DoesNotExist:
+        logger.error(
+            f'域名配置任务不存在，放弃执行: id={task_id}'
+        )
+        return
 
     try:
 
@@ -140,9 +190,15 @@ def execute_server_auth_task(task_id):
     3. 将账号加入各服务器本地管理员组
     """
 
-    task = ServerAuthTask.objects.get(
-        id=task_id
-    )
+    try:
+        task = ServerAuthTask.objects.get(
+            id=task_id
+        )
+    except ServerAuthTask.DoesNotExist:
+        logger.error(
+            f'服务器授权任务不存在，放弃执行: id={task_id}'
+        )
+        return
 
     try:
 
@@ -176,9 +232,15 @@ def execute_trust_site_task(task_id):
     2. 将域名加入用户 IE/Edge 受信任站点
     """
 
-    task = TrustSiteTask.objects.get(
-        id=task_id
-    )
+    try:
+        task = TrustSiteTask.objects.get(
+            id=task_id
+        )
+    except TrustSiteTask.DoesNotExist:
+        logger.error(
+            f'受信任站点任务不存在，放弃执行: id={task_id}'
+        )
+        return
 
     try:
 

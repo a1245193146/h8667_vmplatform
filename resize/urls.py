@@ -54,6 +54,12 @@ urlpatterns = [
         name='api_vm_disks'
     ),
 
+    path(
+        'api/task/<int:task_id>/status/',
+        views.api_task_status,
+        name='api_task_status'
+    ),
+
     # 退出登录
     path(
         'logout/',

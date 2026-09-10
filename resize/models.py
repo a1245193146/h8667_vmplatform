@@ -2,6 +2,10 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 
 
+# 自动审批阈值：申请扩容量 < 200GB 可自动审批，>= 200GB 需人工审批
+AUTO_APPROVE_MAX_ADD_GB = 200
+
+
 class DiskResizeTask(models.Model):
 
     STATUS_CHOICES = (
@@ -46,6 +50,16 @@ class DiskResizeTask(models.Model):
 
     current_size = models.IntegerField(
         verbose_name='当前大小(GB)'
+    )
+
+    datastore_name = models.CharField(
+        max_length=255, blank=True, default='',
+        verbose_name='Datastore'
+    )
+
+    datastore_free_gb = models.IntegerField(
+        null=True, blank=True,
+        verbose_name='申请时存储剩余(GB)'
     )
 
     add_size = models.IntegerField(
@@ -118,8 +132,8 @@ class DiskResizeTask(models.Model):
 
     @property
     def needs_approval(self):
-        """判断是否需要人工审批: 虚拟机磁盘>200GB 需要审批，<=200GB 自动批准"""
-        return self.current_size > 200
+        """add_size >= 200GB 需人工审批；< 200GB 可自动审批（存储不足时仍转人工）。"""
+        return self.add_size >= AUTO_APPROVE_MAX_ADD_GB
 
 
 class DomainTask(models.Model):

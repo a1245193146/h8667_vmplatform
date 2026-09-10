@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -17,8 +18,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # 延迟导入 hpjx_sso，避免在设置加载前访问 settings
 # import hpjx.hpjx_sso
 
-CELERY_BROKER_URL = 'redis://@x.x.20.143:6379/0'
-CELERY_RESULT_BACKEND = 'redis://@x.x.20.143:6379/1'
+# 生产环境请通过环境变量覆盖
+CELERY_BROKER_URL = os.environ.get('VMP_CELERY_BROKER_URL', 'redis://@x.x.20.143:6379/0')
+# 生产环境请通过环境变量覆盖
+CELERY_RESULT_BACKEND = os.environ.get('VMP_CELERY_RESULT_BACKEND', 'redis://@x.x.20.143:6379/1')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
@@ -27,10 +30,12 @@ CELERY_TIMEZONE = 'Asia/Shanghai'
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-d=h!$@&b#*(@piwbpllo@#3xu6*^r&+s2qh$mm%a8cmmp17u4l'
+# 生产环境请通过环境变量覆盖
+SECRET_KEY = os.environ.get('VMP_SECRET_KEY', 'django-insecure-d=h!$@&b#*(@piwbpllo@#3xu6*^r&+s2qh$mm%a8cmmp17u4l')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# 生产环境请通过环境变量覆盖
+DEBUG = os.environ.get('VMP_DEBUG', 'true').lower() == 'true'
 
 ALLOWED_HOSTS = ['*']
 
@@ -44,14 +49,18 @@ CSRF_TRUSTED_ORIGINS = [
 
 VCENTER_CONFIG = {
     'HOST': "x.x.2.40",
-    'USERNAME': "administrator@vsphere.local",
-    'PASSWORD': "NettrixXXXX.",
+    # 生产环境请通过环境变量覆盖
+    'USERNAME': os.environ.get('VMP_VCENTER_USERNAME', "administrator@vsphere.local"),
+    # 生产环境请通过环境变量覆盖
+    'PASSWORD': os.environ.get('VMP_VCENTER_PASSWORD', "NettrixXXXX."),
 }
 ANSIBLE_CONFIG = {
 
     'HOST': 'x.x.20.226',
-    'USERNAME': 'xxxx',
-    'PASSWORD': 'xxxxxxxx',
+    # 生产环境请通过环境变量覆盖
+    'USERNAME': os.environ.get('VMP_ANSIBLE_USERNAME', 'xxxx'),
+    # 生产环境请通过环境变量覆盖
+    'PASSWORD': os.environ.get('VMP_ANSIBLE_PASSWORD', 'xxxxxxxx'),
     'WORKDIR': '/etc/ansible',
     'PLAYBOOK': 'playbooks/windows_extend.yml',
     'windows_list': 'inventory.d/windows_dynamic.ini',
@@ -63,7 +72,8 @@ AD_CONFIG = {
     'DOMAIN': 'hp4307.com',
     'NETBIOS': 'hp4307',
     'USERNAME': 'hp4307\\bakadmin',
-    'PASSWORD': '1qazxsw@',
+    # 生产环境请通过环境变量覆盖
+    'PASSWORD': os.environ.get('VMP_AD_PASSWORD', '1qazxsw@'),
     'SEARCH_BASE': 'DC=HP4307,DC=com',
     # 文件日志目录（与原运维脚本保持一致）
     'LOG_DIR': r'D:\logs\ywops\server',
@@ -74,7 +84,8 @@ TRUST_SITE_CONFIG = {
     'HOST': '192.168.2.86',
     'NETBIOS': 'hp4307',
     'USERNAME': 'bakadmin',
-    'PASSWORD': '1qazxsw@',
+    # 生产环境请通过环境变量覆盖
+    'PASSWORD': os.environ.get('VMP_TRUST_SITE_PASSWORD', '1qazxsw@'),
     # 文件日志目录（与原运维脚本保持一致）
     'LOG_DIR': r'D:\logs\ywops\trust_site',
 }
@@ -132,7 +143,8 @@ DATABASES = {
         'ENGINE': 'hpjx.django.db.engine.mysql',
         'NAME': 'h8667_vm_resize',
         'USER': 'root',
-        'PASSWORD': 'xxxxx',
+        # 生产环境请通过环境变量覆盖
+        'PASSWORD': os.environ.get('VMP_DB_PASSWORD', 'xxxxx'),
         'HOST': '10.2.xx.xxx',
         'PORT': '3306',
         'TEST': {
@@ -195,14 +207,16 @@ STATIC_URL = 'static/'
 SSO_USER_INFO_TYPE = 'detail'  # 'detail'
 
 SSO_APP_ID = 'h8667_vmplatform'
-SSO_APP_SECRET = 'CABC4D89F1B94852B05231A9E4E053BC'
+# 生产环境请通过环境变量覆盖
+SSO_APP_SECRET = os.environ.get('VMP_SSO_APP_SECRET', 'CABC4D89F1B94852B05231A9E4E053BC')
 SSO_LOGIN_INDEX_URL = 'sso.4307.com/ctrl/login/'
 SSO_USER_INFO_URI = 'sso.4307.com/ctrl/userinfo/'
 SSO_GEN_TICKET_URI = 'sso.4307.com/ctrl/ticket/'
 SSO_LOGOUT_URI = 'sso.4307.com/ctrl/logout/'
 
 DEV_SSO_APP_ID = 'h8667_vmplatform'
-DEV_SSO_APP_SECRET = 'CABC4D89F1B94852B05231A9E4E053BC'
+# 生产环境请通过环境变量覆盖
+DEV_SSO_APP_SECRET = os.environ.get('VMP_DEV_SSO_APP_SECRET', 'CABC4D89F1B94852B05231A9E4E053BC')
 DEV_SSO_LOGIN_INDEX_URL = 'dev.sso.4307.com/ctrl/login/'
 DEV_SSO_USER_INFO_URI = 'dev.sso.4307.com/ctrl/userinfo/'
 DEV_SSO_GEN_TICKET_URI = 'dev.sso.4307.com/ctrl/ticket/'
