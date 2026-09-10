@@ -1,5 +1,7 @@
 from django import forms
-from .models import DiskResizeTask, DomainTask, ServerAuthTask, TrustSiteTask
+from .models import (
+    ChangeRecord, DiskResizeTask, DomainTask, ServerAuthTask, TrustSiteTask,
+)
 from .services.vc_service import MAX_ADD_GB
 
 
@@ -178,3 +180,71 @@ class TrustSiteForm(forms.ModelForm):
         if not domain or '.' not in domain:
             raise forms.ValidationError('无效的域名格式')
         return domain
+
+
+class ChangeForm(forms.ModelForm):
+    """变更登记表单（级别由系统自动判定，审批默认同意）"""
+
+    class Meta:
+        model = ChangeRecord
+        fields = [
+            'serial_no',
+            'change_type',
+            'server_ip',
+            'reason',
+            'impact_scope',
+            'rollback_plan',
+        ]
+        widgets = {
+            'serial_no': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': '例如: BG-2026-001',
+                'id': 'id_serial_no',
+            }),
+            'change_type': forms.Select(attrs={
+                'class': 'form-control',
+                'id': 'id_change_type',
+            }),
+            'server_ip': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': '例如: 192.168.1.10,192.168.1.11',
+                'id': 'id_server_ip',
+            }),
+            'reason': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': '请说明变更原因',
+                'id': 'id_reason',
+            }),
+            'impact_scope': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': '请说明变更可能影响的业务范围、系统或用户',
+                'id': 'id_impact_scope',
+            }),
+            'rollback_plan': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': '选填，留空将自动填写：恢复快照和配置还原',
+                'id': 'id_rollback_plan',
+            }),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # 回退方案选填（留空由 model save 自动补默认值）
+        self.fields['rollback_plan'].required = False
+
+    def clean_server_ip(self):
+        value = self.cleaned_data.get('server_ip', '').strip()
+        if not value:
+            raise forms.ValidationError('操作服务器IP不能为空')
+        # 规范化: 逗号分隔，去掉每段两端空白和空项
+        parts = [p.strip() for p in value.split(',') if p.strip()]
+        if not parts:
+            raise forms.ValidationError('请输入至少一个有效的服务器IP')
+        return ','.join(parts)
+
+    def clean_rollback_plan(self):
+        # 允许留空，model save 时自动补默认回退方案
+        return self.cleaned_data.get('rollback_plan', '').strip()

@@ -8,8 +8,12 @@ from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from hpjx.hpjx_sso import sso_require_login
-from .forms import DiskResizeForm, DomainForm, ServerAuthForm, TrustSiteForm
-from .models import DiskResizeTask, DomainTask, ServerAuthTask, TrustSiteTask
+from .forms import (
+    ChangeForm, DiskResizeForm, DomainForm, ServerAuthForm, TrustSiteForm,
+)
+from .models import (
+    ChangeRecord, DiskResizeTask, DomainTask, ServerAuthTask, TrustSiteTask,
+)
 from .tasks import (
     execute_resize_task,
     execute_domain_task,
@@ -664,4 +668,45 @@ def trust_site_detail(request, task_id):
 
     return render(request, 'resize/trust_site_detail.html', {
         'task': task,
+    })
+
+
+# ==================== 变更管理（登记即同意，全员可查） ====================
+
+@sso_required
+def change_submit(request):
+    """提交变更登记（级别自动判定，审批默认同意）"""
+
+    if request.method == 'POST':
+
+        form = ChangeForm(request.POST)
+
+        if form.is_valid():
+
+            task = form.save(commit=False)
+            task.applicant = get_sso_username(request)
+            task.save()
+
+            return redirect('change_list')
+
+    else:
+
+        form = ChangeForm()
+
+    return render(request, 'resize/change_submit.html', {
+        'form': form,
+    })
+
+
+@sso_required
+def change_list(request):
+    """变更记录列表（不做申请人过滤，所有人可见全部记录）"""
+
+    all_records = ChangeRecord.objects.all()
+    paginator = Paginator(all_records, 20)
+    page_number = request.GET.get('page')
+    tasks = paginator.get_page(page_number)
+
+    return render(request, 'resize/change_list.html', {
+        'tasks': tasks,
     })

@@ -1,0 +1,115 @@
+{% extends "resize/base.html" %}
+
+{% block title %}变更申请 - 运维平台{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm mx-auto" style="max-width: 760px;">
+    <div class="card-header bg-white">
+        <h4 class="mb-0 fw-bold">变更登记</h4>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info py-2 mb-4">
+            <small><strong>说明：</strong>涉及信息系统运行环境、应用配置、数据结构、安全策略的调整请在此登记。多台服务器请用英文逗号 <code>,</code> 分隔。<strong>级别由系统按变更类型自动判定，提交即记录、默认同意。</strong></small>
+        </div>
+        <form method="POST" action="{% url 'change_submit' %}" id="changeForm">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+            {% endif %}
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="id_serial_no" class="form-label fw-bold">序号</label>
+                    {{ form.serial_no }}
+                    {% if form.serial_no.errors %}
+                    <div class="text-danger small mt-1">{{ form.serial_no.errors }}</div>
+                    {% endif %}
+                    <div class="form-text">手工填写，例如: BG-2026-001</div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="id_change_type" class="form-label fw-bold">变更类型</label>
+                    {{ form.change_type }}
+                    {% if form.change_type.errors %}
+                    <div class="text-danger small mt-1">{{ form.change_type.errors }}</div>
+                    {% endif %}
+                    <div class="form-text mt-2">
+                        系统判定级别：<span id="levelBadge" class="badge bg-secondary px-2 py-1">日常操作</span>
+                    </div>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label for="id_server_ip" class="form-label fw-bold">操作服务器 IP</label>
+                {{ form.server_ip }}
+                {% if form.server_ip.errors %}
+                <div class="text-danger small mt-1">{{ form.server_ip.errors }}</div>
+                {% endif %}
+                <div class="form-text">多台服务器请用英文逗号分隔，例如: 192.168.1.10,192.168.1.11</div>
+            </div>
+            <div class="mb-3">
+                <label for="id_reason" class="form-label fw-bold">变更原因</label>
+                {{ form.reason }}
+                {% if form.reason.errors %}
+                <div class="text-danger small mt-1">{{ form.reason.errors }}</div>
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                <label for="id_impact_scope" class="form-label fw-bold">可能影响范围</label>
+                {{ form.impact_scope }}
+                {% if form.impact_scope.errors %}
+                <div class="text-danger small mt-1">{{ form.impact_scope.errors }}</div>
+                {% endif %}
+            </div>
+            <div class="mb-4">
+                <label for="id_rollback_plan" class="form-label fw-bold">回退方案 <span class="text-muted fw-normal small">（选填）</span></label>
+                {{ form.rollback_plan }}
+                {% if form.rollback_plan.errors %}
+                <div class="text-danger small mt-1">{{ form.rollback_plan.errors }}</div>
+                {% endif %}
+                <div class="form-text">留空将自动填写：恢复快照和配置还原</div>
+            </div>
+            <div class="d-grid">
+                <button type="submit" class="btn btn-primary btn-lg" id="btnSubmit">提交变更登记</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    // 变更类型 -> 级别映射（与后端 CHANGE_TYPE_TO_LEVEL 一致）
+    var LEVEL_MAP = {
+        'db_param': 'major', 'server_migration': 'major', 'firewall_policy': 'major',
+        'core_switch': 'major', 'system_upgrade': 'major',
+        'app_config': 'normal', 'service_param': 'normal',
+        'permission': 'normal', 'script': 'normal'
+    };
+    var LEVEL_STYLE = {
+        'major':   {'text': '重大变更', 'cls': 'badge bg-danger px-2 py-1'},
+        'normal':  {'text': '一般变更', 'cls': 'badge bg-warning text-dark px-2 py-1'},
+        'routine': {'text': '日常操作', 'cls': 'badge bg-secondary px-2 py-1'}
+    };
+
+    var typeSelect = document.getElementById('id_change_type');
+    var badge = document.getElementById('levelBadge');
+
+    function refreshLevel() {
+        var level = LEVEL_MAP[typeSelect.value] || 'routine';
+        var style = LEVEL_STYLE[level];
+        badge.textContent = style.text;
+        badge.className = style.cls;
+    }
+
+    typeSelect.addEventListener('change', refreshLevel);
+    refreshLevel();
+
+    // 提交按钮 loading 态，防重复提交
+    var form = document.getElementById('changeForm');
+    var btn = document.getElementById('btnSubmit');
+    form.addEventListener('submit', function () {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>提交中...';
+    });
+})();
+</script>
+{% endblock %}

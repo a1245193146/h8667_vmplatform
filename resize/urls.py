@@ -140,4 +140,17 @@ urlpatterns = [
         views.trust_site_detail,
         name='trust_site_detail'
     ),
+
+    # 变更管理（登记即同意，全员可查）
+    path(
+        'change/',
+        views.change_submit,
+        name='change_submit'
+    ),
+
+    path(
+        'change/list/',
+        views.change_list,
+        name='change_list'
+    ),
 ]

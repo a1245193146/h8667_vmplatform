@@ -1,6 +1,8 @@
 from django.contrib import admin
 
-from .models import DiskResizeTask, DomainTask, ServerAuthTask, TrustSiteTask
+from .models import (
+    ChangeRecord, DiskResizeTask, DomainTask, ServerAuthTask, TrustSiteTask,
+)
 
 
 @admin.register(DiskResizeTask)
@@ -49,4 +51,16 @@ class TrustSiteTaskAdmin(admin.ModelAdmin):
     list_filter = ('status',)
     search_fields = ('domain', 'applicant')
     readonly_fields = ('create_time', 'finish_time')
+    ordering = ('-id',)
+
+
+@admin.register(ChangeRecord)
+class ChangeRecordAdmin(admin.ModelAdmin):
+    list_display = (
+        'id', 'serial_no', 'change_type', 'level',
+        'server_ip', 'applicant', 'implement_time',
+    )
+    list_filter = ('change_type', 'level')
+    search_fields = ('serial_no', 'server_ip', 'applicant', 'reason')
+    readonly_fields = ('implement_time', 'approved_at')
     ordering = ('-id',)

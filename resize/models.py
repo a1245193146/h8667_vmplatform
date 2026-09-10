@@ -1,5 +1,6 @@
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
+from django.utils import timezone
 
 
 # 自动审批阈值：申请扩容量 < 200GB 可自动审批，>= 200GB 需人工审批
@@ -368,3 +369,116 @@ class TrustSiteTask(models.Model):
 
     def __str__(self):
         return f'{self.domain} - {self.applicant}'
+
+
+# ==================== 变更管理 ====================
+
+CHANGE_TYPE_CHOICES = (
+    ('db_param', '数据库参数调整'), ('server_migration', '服务器迁移'),
+    ('firewall_policy', '防火墙策略调整'), ('core_switch', '核心交换配置修改'),
+    ('system_upgrade', '业务系统升级'),
+    ('app_config', '应用配置修改'), ('service_param', '服务参数调整'),
+    ('permission', '权限调整'), ('script', '脚本修改'),
+    ('other', '其他'),
+)
+
+CHANGE_TYPE_TO_LEVEL = {
+    'db_param': 'major', 'server_migration': 'major', 'firewall_policy': 'major',
+    'core_switch': 'major', 'system_upgrade': 'major',
+    'app_config': 'normal', 'service_param': 'normal',
+    'permission': 'normal', 'script': 'normal',
+}
+
+LEVEL_CHOICES = (
+    ('major', '重大变更'), ('normal', '一般变更'), ('routine', '日常操作'),
+)
+
+DEFAULT_ROLLBACK = '恢复快照和配置还原'
+
+
+class ChangeRecord(models.Model):
+    """变更记录。
+
+    信息化人员登记涉及信息系统运行环境、应用配置、数据结构、
+    安全策略的调整。级别由系统按变更类型自动判定，审批默认同意。
+    """
+
+    serial_no = models.CharField(
+        max_length=50, verbose_name='序号'
+    )
+
+    change_type = models.CharField(
+        max_length=20, choices=CHANGE_TYPE_CHOICES,
+        verbose_name='变更类型'
+    )
+
+    server_ip = models.CharField(
+        max_length=500, verbose_name='操作服务器IP',
+        help_text='多台用英文逗号分隔'
+    )
+
+    reason = models.TextField(
+        verbose_name='变更原因'
+    )
+
+    impact_scope = models.TextField(
+        verbose_name='可能影响范围'
+    )
+
+    rollback_plan = models.TextField(
+        blank=True, default='',
+        verbose_name='回退方案'
+    )
+
+    level = models.CharField(
+        max_length=10, choices=LEVEL_CHOICES,
+        default='routine', editable=False,
+        verbose_name='级别'
+    )
+
+    applicant = models.CharField(
+        max_length=100, verbose_name='操作人'
+    )
+
+    # 审批默认同意
+    approval_status = models.CharField(
+        max_length=20,
+        choices=(
+            ('approved', '已同意'),
+        ),
+        default='approved',
+        verbose_name='审批'
+    )
+
+    approved_by = models.CharField(
+        max_length=100, default='system',
+        verbose_name='审批人'
+    )
+
+    approved_at = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name='审批时间'
+    )
+
+    implement_time = models.DateTimeField(
+        auto_now_add=True, verbose_name='实施时间'
+    )
+
+    class Meta:
+        verbose_name = '变更记录'
+        verbose_name_plural = '变更记录'
+        ordering = ['-id']
+
+    def __str__(self):
+        return f'{self.serial_no} - {self.get_change_type_display()}'
+
+    def save(self, *args, **kwargs):
+        # 级别由系统按变更类型自动判定，未映射的类型为日常操作
+        self.level = CHANGE_TYPE_TO_LEVEL.get(self.change_type, 'routine')
+        # 回退方案留空自动补默认
+        if not self.rollback_plan or not self.rollback_plan.strip():
+            self.rollback_plan = DEFAULT_ROLLBACK
+        # 审批默认同意，自动补审批时间
+        if not self.approved_at:
+            self.approved_at = timezone.now()
+        super().save(*args, **kwargs)
