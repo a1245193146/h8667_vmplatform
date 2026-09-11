@@ -53,6 +53,37 @@ python manage.py runserver 0.0.0.0:8000
 celery -A h8667_vmplatform worker -l info
 ```
 
+### 从旧版本升级（生产库已存在的情况）
+
+旧版本的 `resize_diskresizetask` 表中 `disk_key`、`disk_label`、`drive_letter`、
+`approval_status`、`approved_by`、`approved_at`、`reject_reason` 七列是**手工补建**的，
+本次已补写迁移文件。升级时请按顺序执行：
+
+```bash
+# 1. 真实执行 0004：新增 datastore_name / datastore_free_gb 两列
+python manage.py migrate resize 0004
+
+# 2. 0005 是上述七列的历史漂移补录，列已存在，仅登记不执行 SQL
+python manage.py migrate resize 0005 --fake
+
+# 3. 0006 新建变更记录表 resize_changerecord
+python manage.py migrate resize 0006
+
+# 4. 确认全部 [X]
+python manage.py showmigrations resize
+```
+
+> ⚠️ 注意：**不要**直接 `python manage.py migrate resize 0005 --fake`——
+> 它会连带把 0004 标记为已执行而跳过建列，导致
+> `Unknown column 'datastore_name' in 'field list'`。
+> 若已经误执行，恢复办法：
+> ```bash
+> python manage.py migrate resize 0003 --fake   # 仅回退登记，不动数据
+> python manage.py migrate resize 0004          # 这次真实建列
+> python manage.py migrate resize 0005 --fake
+> python manage.py migrate resize 0006          # 若提示表已存在则加 --fake
+> ```
+
 ## 需求实现对照
 
 | # | 需求 | 实现说明 |

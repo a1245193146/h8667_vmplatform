@@ -35,6 +35,11 @@ main { flex: 1; }
     -webkit-backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--vmp-border);
     box-shadow: 0 2px 12px rgba(80, 62, 40, 0.06);
+    /* backdrop-filter 使导航成为层叠上下文且层级为 0，
+       Bootstrap 的 .card 等 position:relative 元素在 DOM 树中位于导航之后，
+       会同层后绘盖住下拉菜单；显式提高导航层级修复下拉被遮盖问题 */
+    position: relative;
+    z-index: 1030;
 }
 
 .navbar-warm .navbar-brand {
