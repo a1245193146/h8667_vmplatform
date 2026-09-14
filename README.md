@@ -30,6 +30,20 @@
 - 认证：hpjx 内网 SSO（`hpjx.hpjx_sso`）
 - 前端：Django 模板 + 本地 Bootstrap 5（无外部 CDN，内网离线可用）
 
+## 防火墙自动化管理模块（firewall/）
+
+Windows 主机防火墙"策略自动学习 + 最小权限规则 + 人工审核 + 持续监控回收"：
+
+- **采集链**（Celery Beat 定时，页面只查库）：防火墙状态/规则/网络连接/DROP 事件，Ansible → PowerShell → 单行 JSON → 去重入库（`(host,event_hash)` 唯一 + bulk_create）
+- **进程关联**：安全事件日志 5152/5156/5157（auditpol 开启）+ pfirewall.log 偏移跟踪兜底 + 连接快照 PID→程序路径→服务名
+- **风险引擎**：低（内部IP+已识别程序+非敏感端口+重复出现）→ 自动生成 `AUTO-ITOPS-` 规则并下发；中（通用运行时/DB端口/程序不明）→ 人工审核；高（外部IP/敏感端口 135,139,445,3389,5985,5986）→ 禁止自动
+- **防自锁红线**：启用防火墙前强制先下发"仅允许 Ansible 控制机 IP 访问 WinRM 5985/5986"保护规则
+- **生命周期**：候选→审批→Ansible 下发→验证→命中监控（事件关联近似）→30天未命中/临时到期→回收候选→人工确认→删除（仅限 AUTO-ITOPS- 前缀，人工规则双重拒绝删除）
+- **看板**：ECharts 24h DROP/ALLOW 趋势、TOP 主机/端口/IP/应用、策略/任务/风险 KPI（本地 echarts.min.js，无 CDN）
+- **权限**：关防火墙/删规则/审批仅管理员（SSO 角色），全量审计日志（谁/何时/主机/操作/旧值/新值/Ansible任务ID/结果）
+
+上线步骤：`python manage.py migrate` → 重启 celery worker 与 beat → 先对 1~2 台测试主机验证采集 → 按 `FW_INTERNAL_CIDRS` 配置内网网段。详见《防火墙模块可行性分析与设计.md》。
+
 ## 部署说明
 
 依赖：
