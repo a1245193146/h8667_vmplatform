@@ -1,0 +1,261 @@
+{% extends "resize/base.html" %}
+{% load static %}
+
+{% block title %}防火墙监控看板 - 信息系统运维平台{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="fw-bold mb-0" style="color: var(--vmp-ink);">防火墙监控看板</h3>
+    <small class="text-muted">数据来自周期采集，每 60 秒自动刷新</small>
+</div>
+
+{{ data|json_script:"dashboard-data" }}
+
+<!-- KPI 五组 -->
+<div class="row">
+    <div class="col-md mb-3">
+        <div class="card h-100">
+            <div class="card-body py-3">
+                <div class="text-muted small mb-2">主机概况</div>
+                <div class="fs-4 fw-bold text-primary" id="kpi-host-total">{{ data.host_summary.total }}</div>
+                <div class="small mt-1">
+                    <span class="badge bg-success">开启 <span id="kpi-host-on">{{ data.host_summary.on }}</span></span>
+                    <span class="badge bg-danger">关闭 <span id="kpi-host-off">{{ data.host_summary.off }}</span></span>
+                    <span class="badge bg-warning text-dark">部分 <span id="kpi-host-partial">{{ data.host_summary.partial }}</span></span>
+                </div>
+                <div class="small mt-1 text-muted">
+                    离线 <span id="kpi-host-offline">{{ data.host_summary.offline }}</span> ·
+                    采集过期 <span id="kpi-host-stale">{{ data.host_summary.stale }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md mb-3">
+        <div class="card h-100">
+            <div class="card-body py-3">
+                <div class="text-muted small mb-2">今日事件</div>
+                <div class="fs-4 fw-bold" style="color:#5c7a4e;" id="kpi-today-allow">{{ data.today.allow }}</div>
+                <div class="small mt-1">
+                    <span class="badge bg-danger">DROP <span id="kpi-today-drop">{{ data.today.drop }}</span></span>
+                    <span class="badge bg-success">ALLOW <span id="kpi-today-allow2">{{ data.today.allow }}</span></span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md mb-3">
+        <div class="card h-100">
+            <div class="card-body py-3">
+                <div class="text-muted small mb-2">策略规则</div>
+                <div class="fs-4 fw-bold text-primary" id="kpi-rule-total">{{ data.rules.total }}</div>
+                <div class="small mt-1 text-muted">
+                    待下发 <span id="kpi-rule-pending">{{ data.rules.pending }}</span> ·
+                    自动 <span id="kpi-rule-auto">{{ data.rules.auto }}</span> ·
+                    临时 <span id="kpi-rule-temp">{{ data.rules.temporary }}</span>
+                </div>
+                <div class="small mt-1 text-muted">
+                    7日内到期 <span id="kpi-rule-expiring">{{ data.rules.expiring }}</span> ·
+                    待回收 <span id="kpi-rule-unused">{{ data.rules.unused }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md mb-3">
+        <div class="card h-100">
+            <div class="card-body py-3">
+                <div class="text-muted small mb-2">Ansible 任务</div>
+                <div class="fs-4 fw-bold" style="color:#4e7a72;" id="kpi-task-running">{{ data.tasks.running }}</div>
+                <div class="small mt-1">
+                    <span class="badge bg-success">成功 <span id="kpi-task-success">{{ data.tasks.success }}</span></span>
+                    <span class="badge bg-danger">失败 <span id="kpi-task-failed">{{ data.tasks.failed }}</span></span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md mb-3">
+        <div class="card h-100">
+            <div class="card-body py-3">
+                <div class="text-muted small mb-2">风险概览</div>
+                <div class="fs-4 fw-bold text-danger" id="kpi-risk-high">{{ data.risk.high_events }}</div>
+                <div class="small mt-1 text-muted">
+                    未知程序 <span id="kpi-risk-unknown">{{ data.risk.unknown_apps }}</span> ·
+                    外联 <span id="kpi-risk-external">{{ data.risk.external_comms }}</span> ·
+                    敏感端口 <span id="kpi-risk-sensitive">{{ data.risk.sensitive_ports }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 24h 趋势 -->
+<div class="card mb-4">
+    <div class="card-header fw-bold">近 24 小时事件趋势（DROP / ALLOW）</div>
+    <div class="card-body">
+        <div id="trend-chart" style="width: 100%; height: 320px;"></div>
+    </div>
+</div>
+
+<!-- TOP 榜 -->
+<div class="row">
+    <div class="col-md-6 col-lg-3 mb-4">
+        <div class="card h-100">
+            <div class="card-header fw-bold">TOP 主机（事件数）</div>
+            <div class="card-body p-0">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-warm"><tr><th>主机</th><th class="text-end">次数</th></tr></thead>
+                    <tbody id="top-hosts">
+                    {% for name, n in data.top.hosts %}
+                        <tr><td>{{ name }}</td><td class="text-end">{{ n }}</td></tr>
+                    {% empty %}
+                        <tr><td colspan="2" class="empty-state py-3">暂无数据</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-3 mb-4">
+        <div class="card h-100">
+            <div class="card-header fw-bold">TOP 目标端口</div>
+            <div class="card-body p-0">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-warm"><tr><th>端口</th><th class="text-end">次数</th></tr></thead>
+                    <tbody id="top-ports">
+                    {% for p, n in data.top.ports %}
+                        <tr><td>{{ p }}</td><td class="text-end">{{ n }}</td></tr>
+                    {% empty %}
+                        <tr><td colspan="2" class="empty-state py-3">暂无数据</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-3 mb-4">
+        <div class="card h-100">
+            <div class="card-header fw-bold">TOP 目标 IP</div>
+            <div class="card-body p-0">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-warm"><tr><th>IP</th><th class="text-end">次数</th></tr></thead>
+                    <tbody id="top-ips">
+                    {% for ip, n in data.top.ips %}
+                        <tr><td>{{ ip }}</td><td class="text-end">{{ n }}</td></tr>
+                    {% empty %}
+                        <tr><td colspan="2" class="empty-state py-3">暂无数据</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-3 mb-4">
+        <div class="card h-100">
+            <div class="card-header fw-bold">TOP 应用程序</div>
+            <div class="card-body p-0">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-warm"><tr><th>程序</th><th class="text-end">次数</th></tr></thead>
+                    <tbody id="top-apps">
+                    {% for app, n in data.top.apps %}
+                        <tr><td>{{ app }}</td><td class="text-end">{{ n }}</td></tr>
+                    {% empty %}
+                        <tr><td colspan="2" class="empty-state py-3">暂无数据</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'firewall/js/echarts.min.js' %}"></script>
+<script>
+(function () {
+    var data = JSON.parse(document.getElementById('dashboard-data').textContent);
+    var chart = echarts.init(document.getElementById('trend-chart'));
+
+    function renderChart(d) {
+        chart.setOption({
+            color: ['#c0504d', '#5c7a4e'],
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['DROP', 'ALLOW'] },
+            grid: { left: 50, right: 20, top: 40, bottom: 40 },
+            xAxis: {
+                type: 'category',
+                data: d.trend_24h.map(function (p) { return p.hour; })
+            },
+            yAxis: { type: 'value', minInterval: 1 },
+            series: [
+                {
+                    name: 'DROP', type: 'line', smooth: true,
+                    areaStyle: { opacity: 0.12 },
+                    data: d.trend_24h.map(function (p) { return p.drop; })
+                },
+                {
+                    name: 'ALLOW', type: 'line', smooth: true,
+                    areaStyle: { opacity: 0.12 },
+                    data: d.trend_24h.map(function (p) { return p.allow; })
+                }
+            ]
+        });
+    }
+
+    function setText(id, v) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = v;
+    }
+
+    function renderTop(id, rows) {
+        var tbody = document.getElementById(id);
+        if (!tbody) return;
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="2" class="empty-state py-3">暂无数据</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(function (r) {
+            return '<tr><td>' + String(r[0]).replace(/[<>&]/g, '') +
+                   '</td><td class="text-end">' + r[1] + '</td></tr>';
+        }).join('');
+    }
+
+    function renderKpi(d) {
+        setText('kpi-host-total', d.host_summary.total);
+        setText('kpi-host-on', d.host_summary.on);
+        setText('kpi-host-off', d.host_summary.off);
+        setText('kpi-host-partial', d.host_summary.partial);
+        setText('kpi-host-offline', d.host_summary.offline);
+        setText('kpi-host-stale', d.host_summary.stale);
+        setText('kpi-today-allow', d.today.allow);
+        setText('kpi-today-allow2', d.today.allow);
+        setText('kpi-today-drop', d.today.drop);
+        setText('kpi-rule-total', d.rules.total);
+        setText('kpi-rule-pending', d.rules.pending);
+        setText('kpi-rule-auto', d.rules.auto);
+        setText('kpi-rule-temp', d.rules.temporary);
+        setText('kpi-rule-expiring', d.rules.expiring);
+        setText('kpi-rule-unused', d.rules.unused);
+        setText('kpi-task-running', d.tasks.running);
+        setText('kpi-task-success', d.tasks.success);
+        setText('kpi-task-failed', d.tasks.failed);
+        setText('kpi-risk-high', d.risk.high_events);
+        setText('kpi-risk-unknown', d.risk.unknown_apps);
+        setText('kpi-risk-external', d.risk.external_comms);
+        setText('kpi-risk-sensitive', d.risk.sensitive_ports);
+        renderTop('top-hosts', d.top.hosts);
+        renderTop('top-ports', d.top.ports);
+        renderTop('top-ips', d.top.ips);
+        renderTop('top-apps', d.top.apps);
+    }
+
+    renderChart(data);
+    window.addEventListener('resize', function () { chart.resize(); });
+
+    setInterval(function () {
+        fetch('{% url "fw_api_dashboard" %}', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { renderChart(d); renderKpi(d); })
+            .catch(function (e) { console.error('dashboard refresh failed', e); });
+    }, 60000);
+})();
+</script>
+{% endblock %}

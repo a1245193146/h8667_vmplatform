@@ -1,0 +1,64 @@
+{% extends "resize/base.html" %}
+
+{% block title %}Ansible 任务 - 信息系统运维平台{% endblock %}
+
+{% block content %}
+<h3 class="fw-bold mb-3" style="color: var(--vmp-ink);">Ansible 任务记录</h3>
+
+<div class="card mb-3">
+    <div class="card-body py-3">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small mb-1">状态</label>
+                <select name="status" class="form-select">
+                    <option value="">全部</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if f_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary rounded-pill px-4">筛选</button>
+                <a href="{% url 'fw_tasks' %}" class="btn btn-outline-secondary rounded-pill px-3">重置</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-sm table-hover mb-0">
+            <thead class="table-warm">
+                <tr>
+                    <th>任务号</th><th>名称</th><th>Playbook</th><th>目标主机</th>
+                    <th>状态</th><th>发起人</th><th>创建时间</th><th>完成时间</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for task in page_obj %}
+                <tr>
+                    <td class="small text-muted" title="{{ task.task_ref }}">{{ task.task_ref|truncatechars:8 }}</td>
+                    <td>{{ task.name }}</td>
+                    <td class="small">{{ task.playbook }}</td>
+                    <td class="small">{{ task.target_hosts|default:'-'|truncatechars:30 }}</td>
+                    <td>
+                        {% if task.status == 'success' %}<span class="badge bg-success">成功</span>
+                        {% elif task.status == 'failed' %}<span class="badge bg-danger">失败</span>
+                        {% elif task.status == 'timeout' %}<span class="badge bg-danger">超时</span>
+                        {% elif task.status == 'running' %}<span class="badge bg-info text-dark">执行中</span>
+                        {% else %}<span class="badge bg-warning text-dark">待执行</span>{% endif %}
+                    </td>
+                    <td>{{ task.initiated_by }}</td>
+                    <td class="small text-muted text-nowrap">{{ task.created_at|date:'m-d H:i:s' }}</td>
+                    <td class="small text-muted text-nowrap">{{ task.finished_at|date:'m-d H:i:s'|default:'-' }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="8" class="empty-state">暂无任务记录</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% include "firewall/_pager.html" %}
+{% endblock %}
