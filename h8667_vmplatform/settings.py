@@ -26,6 +26,47 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Asia/Shanghai'
+
+# Celery Beat 定时调度（防火墙模块：定时采集 + 数据库存储 + 页面查库）
+from celery.schedules import crontab  # noqa: E402
+
+CELERY_BEAT_SCHEDULE = {
+    'fw-collect-all-hosts': {
+        'task': 'firewall.tasks.collection.collect_all_hosts_task',
+        'schedule': crontab(minute='*/30'),
+    },
+    'fw-sync-inventory': {
+        'task': 'firewall.tasks.collection.sync_inventory_task',
+        'schedule': crontab(hour=2, minute=0),
+    },
+    'fw-daily-rollup': {
+        'task': 'firewall.tasks.lifecycle.daily_rollup_task',
+        'schedule': crontab(hour=0, minute=30),
+    },
+    'fw-refresh-relations': {
+        'task': 'firewall.tasks.lifecycle.refresh_relations_task',
+        'schedule': crontab(minute='*/30'),
+    },
+    'fw-expire-rules': {
+        'task': 'firewall.tasks.lifecycle.expire_rules_task',
+        'schedule': crontab(minute=5),
+    },
+    'fw-detect-unused': {
+        'task': 'firewall.tasks.lifecycle.detect_unused_task',
+        'schedule': crontab(hour=1, minute=0),
+    },
+    'fw-update-hits': {
+        'task': 'firewall.tasks.lifecycle.update_hits_task',
+        'schedule': crontab(minute='*/15'),
+    },
+    'fw-analyze-candidates': {
+        'task': 'firewall.tasks.lifecycle.analyze_candidates_task',
+        'schedule': crontab(hour=3, minute=0),
+    },
+}
+
+# 防火墙模块：内网网段前缀（用于外部IP判定），可按企业实际补充
+FW_INTERNAL_CIDRS = ['10.', '172.16.', '192.168.', '127.', '169.254.']
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
@@ -101,6 +142,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'resize',
     'domain',
+    'firewall',
 ]
 
 MIDDLEWARE = [

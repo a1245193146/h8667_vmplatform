@@ -23,6 +23,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('resize.urls')),
     path('domain/', include('domain.urls')),
+    path('firewall/', include('firewall.urls')),
     # SSO 退出初始化（用户点击退出）
     path('logout/', sso_logout_init, name='sso_logout_init'),
 ]
