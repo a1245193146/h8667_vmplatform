@@ -1,0 +1,27 @@
+---
+# collect_fwlog.yml — 增量读取目标 Windows 主机 pfirewall.log
+# 对应脚本: firewall/powershell/Read-FwLog.ps1
+# 用法: ansible-playbook firewall/ansible/collect_fwlog.yml -e target_host=x.x.x.x -e offset=0 -e max_lines=2000
+# 输出: ps1 的单行 JSON 原样打印到 stdout
+# 作者: AUTO-GENERATED (Agent B - firewall automation module)
+
+- name: Collect firewall log tail
+  hosts: "{{ target_host }}"
+  gather_facts: false
+  tasks:
+    - name: Copy Read-FwLog.ps1 to target
+      win_copy:
+        src: ../powershell/Read-FwLog.ps1
+        dest: C:\Windows\Temp\AUTO-ITOPS\Read-FwLog.ps1
+
+    - name: Run Read-FwLog.ps1
+      win_shell: >-
+        powershell -NoProfile -ExecutionPolicy Bypass
+        -File C:\Windows\Temp\AUTO-ITOPS\Read-FwLog.ps1
+        -Offset {{ offset | default(0) }}
+        -MaxLines {{ max_lines | default(2000) }}
+      register: result
+
+    - name: Print JSON result
+      debug:
+        var: result.stdout

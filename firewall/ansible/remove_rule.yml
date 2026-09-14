@@ -1,0 +1,26 @@
+---
+# remove_rule.yml — 删除目标主机上 AUTO-ITOPS- 前缀防火墙规则（非本系统规则会被脚本拒绝）
+# 对应脚本: firewall/powershell/Remove-FwRule.ps1
+# 用法: ansible-playbook firewall/ansible/remove_rule.yml -e target_host=x.x.x.x -e rule_name=AUTO-ITOPS-XXX
+# 输出: ps1 的单行 JSON 原样打印到 stdout
+# 作者: AUTO-GENERATED (Agent B - firewall automation module)
+
+- name: Remove firewall rule
+  hosts: "{{ target_host }}"
+  gather_facts: false
+  tasks:
+    - name: Copy Remove-FwRule.ps1 to target
+      win_copy:
+        src: ../powershell/Remove-FwRule.ps1
+        dest: C:\Windows\Temp\AUTO-ITOPS\Remove-FwRule.ps1
+
+    - name: Run Remove-FwRule.ps1
+      win_shell: >-
+        powershell -NoProfile -ExecutionPolicy Bypass
+        -File C:\Windows\Temp\AUTO-ITOPS\Remove-FwRule.ps1
+        -Name {{ rule_name }}
+      register: result
+
+    - name: Print JSON result
+      debug:
+        var: result.stdout

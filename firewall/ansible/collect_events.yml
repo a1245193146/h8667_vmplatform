@@ -1,0 +1,26 @@
+---
+# collect_events.yml — 读取目标 Windows 主机安全日志防火墙事件 (5152/5156/5157)
+# 对应脚本: firewall/powershell/Read-FwSecurityEvents.ps1
+# 用法: ansible-playbook firewall/ansible/collect_events.yml -e target_host=x.x.x.x -e since_minutes=10
+# 输出: ps1 的单行 JSON 原样打印到 stdout
+# 作者: AUTO-GENERATED (Agent B - firewall automation module)
+
+- name: Collect firewall security events
+  hosts: "{{ target_host }}"
+  gather_facts: false
+  tasks:
+    - name: Copy Read-FwSecurityEvents.ps1 to target
+      win_copy:
+        src: ../powershell/Read-FwSecurityEvents.ps1
+        dest: C:\Windows\Temp\AUTO-ITOPS\Read-FwSecurityEvents.ps1
+
+    - name: Run Read-FwSecurityEvents.ps1
+      win_shell: >-
+        powershell -NoProfile -ExecutionPolicy Bypass
+        -File C:\Windows\Temp\AUTO-ITOPS\Read-FwSecurityEvents.ps1
+        -SinceMinutes {{ since_minutes | default(10) }}
+      register: result
+
+    - name: Print JSON result
+      debug:
+        var: result.stdout

@@ -1,0 +1,33 @@
+---
+# set_profile.yml — 设置目标主机防火墙 Profile 启用状态（启用前自动做防自锁保护）
+# 对应脚本: firewall/powershell/Set-FwProfileState.ps1（依赖同目录 Protect-ManagementAccess.ps1）
+# 用法: ansible-playbook firewall/ansible/set_profile.yml -e target_host=x.x.x.x -e profile=All -e fw_enabled=true -e ansible_ip=10.0.0.2
+# 输出: ps1 的单行 JSON 原样打印到 stdout
+# 作者: AUTO-GENERATED (Agent B - firewall automation module)
+
+- name: Set firewall profile state
+  hosts: "{{ target_host }}"
+  gather_facts: false
+  tasks:
+    - name: Copy Set-FwProfileState.ps1 to target
+      win_copy:
+        src: ../powershell/Set-FwProfileState.ps1
+        dest: C:\Windows\Temp\AUTO-ITOPS\Set-FwProfileState.ps1
+
+    - name: Copy Protect-ManagementAccess.ps1 to target (dependency)
+      win_copy:
+        src: ../powershell/Protect-ManagementAccess.ps1
+        dest: C:\Windows\Temp\AUTO-ITOPS\Protect-ManagementAccess.ps1
+
+    - name: Run Set-FwProfileState.ps1
+      win_shell: >-
+        powershell -NoProfile -ExecutionPolicy Bypass
+        -File C:\Windows\Temp\AUTO-ITOPS\Set-FwProfileState.ps1
+        -Profile {{ profile | default('All') }}
+        -Enabled ${{ fw_enabled | default(true) | bool }}
+        -AnsibleIP {{ ansible_ip }}
+      register: result
+
+    - name: Print JSON result
+      debug:
+        var: result.stdout
