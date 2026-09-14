@@ -1,0 +1,45 @@
+---
+# sync_inventory_hosts.yml — 解析 Ansible 服务器本地 inventory，输出 windows 组主机列表 JSON
+# 在 localhost 执行，不连接任何 Windows 主机。
+# 用法: ansible-playbook firewall/ansible/sync_inventory_hosts.yml [-e inventory_file=/etc/ansible/hosts]
+# 输出: {"hosts":[{"hostname":"...","ip":"...","group":"windows"},...]}
+# 作者: AUTO-GENERATED (Agent B - firewall automation module)
+
+- name: Sync windows hosts from local inventory
+  hosts: localhost
+  gather_facts: false
+  vars:
+    inventory_file: "{{ inventory_path | default('/etc/ansible/hosts') }}"
+  tasks:
+    - name: Read inventory file
+      command: "cat {{ inventory_file }}"
+      register: inv_out
+
+    - name: Parse [windows] group hosts into JSON
+      set_fact:
+        result_json_raw: >-
+          {% set ns = namespace(in_win=false, entries=[]) %}
+          {% for line in inv_out.stdout_lines %}
+          {%   set stripped = line | trim %}
+          {%   if stripped.startswith('[') %}
+          {%     set ns.in_win = (stripped == '[windows]') %}
+          {%   elif ns.in_win and stripped and not stripped.startswith('#') %}
+          {%     set parts = stripped.split() %}
+          {%     set ipns = namespace(ip=parts[0]) %}
+          {%     for p in parts[1:] %}
+          {%       if p.startswith('ansible_host=') %}
+          {%         set ipns.ip = p.split('=', 1)[1] %}
+          {%       endif %}
+          {%     endfor %}
+          {%     set ns.entries = ns.entries + [{'hostname': parts[0], 'ip': ipns.ip, 'group': 'windows'}] %}
+          {%   endif %}
+          {% endfor %}
+          {{ {'hosts': ns.entries} | to_json }}
+
+    - name: Trim JSON output
+      set_fact:
+        result_json: "{{ result_json_raw | trim }}"
+
+    - name: Print hosts JSON
+      debug:
+        var: result_json

@@ -1,0 +1,26 @@
+---
+# deploy_rule.yml — 在目标主机创建/幂等更新 AUTO-ITOPS- 前缀防火墙规则
+# 对应脚本: firewall/powershell/New-FwRule.ps1
+# 用法: ansible-playbook firewall/ansible/deploy_rule.yml -e target_host=x.x.x.x -e rule_json='{"rule_name":"AUTO-ITOPS-...",...}'
+# 输出: ps1 的单行 JSON 原样打印到 stdout
+# 作者: AUTO-GENERATED (Agent B - firewall automation module)
+
+- name: Deploy firewall rule
+  hosts: "{{ target_host }}"
+  gather_facts: false
+  tasks:
+    - name: Copy New-FwRule.ps1 to target
+      win_copy:
+        src: ../powershell/New-FwRule.ps1
+        dest: C:\Windows\Temp\AUTO-ITOPS\New-FwRule.ps1
+
+    - name: Run New-FwRule.ps1
+      win_shell: >-
+        powershell -NoProfile -ExecutionPolicy Bypass
+        -File C:\Windows\Temp\AUTO-ITOPS\New-FwRule.ps1
+        -RuleJson '{{ rule_json }}'
+      register: result
+
+    - name: Print JSON result
+      debug:
+        var: result.stdout

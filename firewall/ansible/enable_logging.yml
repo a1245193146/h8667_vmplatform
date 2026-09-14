@@ -1,0 +1,23 @@
+---
+# enable_logging.yml — 开启目标 Windows 主机防火墙日志与安全审计
+# 对应脚本: firewall/powershell/Enable-FwLogging.ps1
+# 用法: ansible-playbook firewall/ansible/enable_logging.yml -e target_host=x.x.x.x
+# 输出: ps1 的单行 JSON 原样打印到 stdout
+# 作者: AUTO-GENERATED (Agent B - firewall automation module)
+
+- name: Enable firewall logging
+  hosts: "{{ target_host }}"
+  gather_facts: false
+  tasks:
+    - name: Copy Enable-FwLogging.ps1 to target
+      win_copy:
+        src: ../powershell/Enable-FwLogging.ps1
+        dest: C:\Windows\Temp\AUTO-ITOPS\Enable-FwLogging.ps1
+
+    - name: Run Enable-FwLogging.ps1
+      win_shell: powershell -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\AUTO-ITOPS\Enable-FwLogging.ps1
+      register: result
+
+    - name: Print JSON result
+      debug:
+        var: result.stdout

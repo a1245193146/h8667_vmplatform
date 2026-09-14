@@ -1,0 +1,26 @@
+---
+# protect_mgmt.yml — 防自锁：确保目标主机存在允许 Ansible 访问 WinRM 的入站规则
+# 对应脚本: firewall/powershell/Protect-ManagementAccess.ps1
+# 用法: ansible-playbook firewall/ansible/protect_mgmt.yml -e target_host=x.x.x.x -e ansible_ip=10.0.0.2
+# 输出: ps1 的单行 JSON 原样打印到 stdout
+# 作者: AUTO-GENERATED (Agent B - firewall automation module)
+
+- name: Protect management access (WinRM)
+  hosts: "{{ target_host }}"
+  gather_facts: false
+  tasks:
+    - name: Copy Protect-ManagementAccess.ps1 to target
+      win_copy:
+        src: ../powershell/Protect-ManagementAccess.ps1
+        dest: C:\Windows\Temp\AUTO-ITOPS\Protect-ManagementAccess.ps1
+
+    - name: Run Protect-ManagementAccess.ps1
+      win_shell: >-
+        powershell -NoProfile -ExecutionPolicy Bypass
+        -File C:\Windows\Temp\AUTO-ITOPS\Protect-ManagementAccess.ps1
+        -AnsibleIP {{ ansible_ip }}
+      register: result
+
+    - name: Print JSON result
+      debug:
+        var: result.stdout
