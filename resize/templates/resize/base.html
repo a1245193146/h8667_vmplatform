@@ -100,6 +100,20 @@
                             <li><a class="dropdown-item" href="{% url 'change_list' %}">变更记录</a></li>
                         </ul>
                     </li>
+                    <!-- 防火墙管理 -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">防火墙管理</a>
+                        <ul class="dropdown-menu shadow">
+                            <li><a class="dropdown-item" href="{% url 'fw_dashboard' %}">仪表盘</a></li>
+                            <li><a class="dropdown-item" href="{% url 'fw_hosts' %}">主机</a></li>
+                            <li><a class="dropdown-item" href="{% url 'fw_rules' %}">规则</a></li>
+                            <li><a class="dropdown-item" href="{% url 'fw_requests' %}">策略申请</a></li>
+                            <li><a class="dropdown-item" href="{% url 'fw_communications' %}">通信关系</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'fw_audit' %}">审计日志</a></li>
+                            <li><a class="dropdown-item" href="{% url 'fw_tasks' %}">Ansible任务</a></li>
+                        </ul>
+                    </li>
                 </ul>
                 <ul class="navbar-nav">
                     {% if is_authenticated %}
