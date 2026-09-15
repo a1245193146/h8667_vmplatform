@@ -67,6 +67,11 @@ CELERY_BEAT_SCHEDULE = {
 
 # 防火墙模块：内网网段前缀（用于外部IP判定），可按企业实际补充
 FW_INTERNAL_CIDRS = ['10.', '172.16.', '192.168.', '127.', '169.254.']
+
+# 防火墙模块：主机同步读取的 Ansible inventory 文件路径（Ansible 服务器上）。
+# 默认为 /etc/ansible/hosts；若 [windows] 组在其他文件（如动态 inventory），在此指定：
+# FW_INVENTORY_PATH = '/etc/ansible/inventory.d/windows_dynamic.ini'
+FW_INVENTORY_PATH = os.environ.get('FW_INVENTORY_PATH', '')
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 

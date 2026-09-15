@@ -34,12 +34,14 @@
           {%     set ns.entries = ns.entries + [{'hostname': parts[0], 'ip': ipns.ip, 'group': 'windows'}] %}
           {%   endif %}
           {% endfor %}
-          {{ {'hosts': ns.entries} | to_json }}
+          {{ {'ok': true, 'data': {'hosts': ns.entries}} | to_json }}
 
     - name: Trim JSON output
       set_fact:
         result_json: "{{ result_json_raw | trim }}"
 
+    # 注意：必须以 msg 打印标准契约 {"ok":true,"data":{...}} 单行 JSON，
+    # Django 侧 parse_host_json 只解包 result.stdout/stdout/msg 三种键。
     - name: Print hosts JSON
       debug:
-        var: result_json
+        msg: "{{ result_json }}"

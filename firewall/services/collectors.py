@@ -6,6 +6,7 @@
 import hashlib
 import logging
 
+from django.conf import settings
 from django.utils import timezone
 
 from firewall.models import (
@@ -321,8 +322,16 @@ def collect_host_all(host_id) -> dict:
 
 
 def sync_hosts_from_inventory() -> int:
-    """sync_inventory_hosts.yml → upsert FirewallHost；返回同步条数。"""
-    res = run_playbook('sync_inventory_hosts.yml', {}, name='sync_inventory')
+    """sync_inventory_hosts.yml → upsert FirewallHost；返回同步条数。
+
+    inventory 文件默认用 Ansible 服务器上的 /etc/ansible/hosts，
+    可通过 settings.FW_INVENTORY_PATH 指定其他文件（如 inventory.d/windows_dynamic.ini）。
+    """
+    extra_vars = {}
+    inv_path = getattr(settings, 'FW_INVENTORY_PATH', '')
+    if inv_path:
+        extra_vars['inventory_path'] = inv_path
+    res = run_playbook('sync_inventory_hosts.yml', extra_vars, name='sync_inventory')
     if not res['ok']:
         logger.error('inventory 同步 playbook 执行失败: %s', res['error'])
         return 0
