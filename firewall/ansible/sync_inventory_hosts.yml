@@ -22,7 +22,7 @@
           {% for line in inv_out.stdout_lines %}
           {%   set stripped = line | trim %}
           {%   if stripped.startswith('[') %}
-          {%     set ns.in_win = (stripped == '[windows]') %}
+          {%     set ns.in_win = (stripped.lower() == '[windows]') %}
           {%   elif ns.in_win and stripped and not stripped.startswith('#') %}
           {%     set parts = stripped.split() %}
           {%     set ipns = namespace(ip=parts[0]) %}

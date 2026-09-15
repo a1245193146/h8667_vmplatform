@@ -87,9 +87,12 @@ def collect_host_status(host_id) -> bool:
     host.last_ansible_status = 'success'
     if data.get('os'):
         host.os_version = str(data['os'])[:128]
+    # inventory 只有 IP 时，用采集到的真实主机名补全显示名
+    if data.get('hostname') and (not host.hostname or host.hostname == host.ip):
+        host.hostname = str(data['hostname'])[:128]
     host.save(update_fields=['firewall_status', 'profiles_detail', 'is_online',
                              'last_collection_time', 'last_ansible_status',
-                             'os_version', 'updated_at'])
+                             'os_version', 'hostname', 'updated_at'])
     logger.info('主机 %s 状态采集成功: %s', host.ip, fw_status)
     return True
 
