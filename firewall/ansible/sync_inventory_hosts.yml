@@ -1,44 +1,78 @@
 ---
-# sync_inventory_hosts.yml — 解析 Ansible 服务器本地 inventory，输出 windows 组主机列表 JSON
+# sync_inventory_hosts.yml — 从 Ansible inventory 同步 windows 组主机列表
 # 在 localhost 执行，不连接任何 Windows 主机。
-# 用法: ansible-playbook firewall/ansible/sync_inventory_hosts.yml [-e inventory_file=/etc/ansible/hosts]
-# 输出: {"hosts":[{"hostname":"...","ip":"...","group":"windows"},...]}
-# 作者: AUTO-GENERATED (Agent B - firewall automation module)
+#
+# 解析方式：ansible-inventory --list（INI 文件、inventory 目录、动态 inventory 脚本均可），
+# 不再 cat 原始文件做文本解析，因此与 ansible-playbook 看到的 inventory 完全一致。
+#
+# inventory 来源优先级：
+#   1) -e inventory_path=/path/to/inventory   （Django 侧默认会显式传入）
+#   2) magic 变量 inventory_file（老版本 ansible 继承命令行 -i；2.21+ 对隐式 localhost 未定义）
+#   3) /etc/ansible/hosts
+#
+# 输出（单行 JSON，标准契约）:
+#   成功: {"ok":true,"data":{"hosts":[{"hostname":"...","ip":"...","group":"windows"},...]}}
+#   失败: {"ok":false,"error":"..."}（随后 fail，playbook 退出码非 0，便于 Django 标记任务失败）
+# 作者: AUTO-GENERATED (firewall automation module)
 
-- name: Sync windows hosts from local inventory
+- name: Sync windows hosts from inventory
   hosts: localhost
   gather_facts: false
   vars:
-    inventory_file: "{{ inventory_path | default('/etc/ansible/hosts') }}"
+    # 注意：必须用过滤器形式 default(...)，不能把未定义变量作为 default() 的参数，
+    # 否则变量未定义时会直接抛错（这正是旧版 exit=2 的原因之一）。
+    inventory_source: "{{ inventory_path | default('', true) }}"
   tasks:
-    - name: Read inventory file
-      command: "cat {{ inventory_file }}"
-      register: inv_out
-
-    - name: Parse [windows] group hosts into JSON
+    - name: Resolve inventory source fallback
       set_fact:
-        result_json_raw: >-
-          {% set ns = namespace(in_win=false, entries=[]) %}
-          {% for line in inv_out.stdout_lines %}
-          {%   set stripped = line | trim %}
-          {%   if stripped.startswith('[') %}
-          {%     set ns.in_win = (stripped.lower() == '[windows]') %}
-          {%   elif ns.in_win and stripped and not stripped.startswith('#') %}
-          {%     set parts = stripped.split() %}
-          {%     set ipns = namespace(ip=parts[0]) %}
-          {%     for p in parts[1:] %}
-          {%       if p.startswith('ansible_host=') %}
-          {%         set ipns.ip = p.split('=', 1)[1] %}
-          {%       endif %}
-          {%     endfor %}
-          {%     set ns.entries = ns.entries + [{'hostname': parts[0], 'ip': ipns.ip, 'group': 'windows'}] %}
-          {%   endif %}
+        inventory_source: "{{ inventory_file | default('/etc/ansible/hosts', true) }}"
+      when: inventory_source | length == 0
+
+    - name: Check inventory source exists
+      stat:
+        path: "{{ inventory_source }}"
+      register: inv_stat
+
+    - name: Print error JSON when inventory missing
+      debug:
+        msg: '{{ {"ok": false, "error": ("inventory 不存在: " ~ inventory_source ~ "（请用 -e inventory_path= 指定正确文件，或检查 Django 的 FW_INVENTORY_PATH 设置）")} | to_json }}'
+      when: not inv_stat.stat.exists
+
+    - name: Fail play when inventory missing
+      fail:
+        msg: "inventory 不存在: {{ inventory_source }}"
+      when: not inv_stat.stat.exists
+
+    - name: Dump inventory via ansible-inventory
+      # 不硬编码 /usr/bin 前缀：pip 安装可能在 /usr/local/bin，yum 安装在 /usr/bin
+      command: "ansible-inventory -i {{ inventory_source }} --list"
+      register: inv_dump
+      failed_when: false
+      changed_when: false
+
+    - name: Print error JSON on inventory read failure
+      debug:
+        msg: '{{ {"ok": false, "error": ("ansible-inventory 读取失败 inventory=" ~ inventory_source ~ " rc=" ~ (inv_dump.rc | string) ~ ": " ~ (inv_dump.stderr | default(""))[:300])} | to_json }}'
+      when: inv_dump.rc != 0
+
+    - name: Fail play on inventory read failure
+      fail:
+        msg: "ansible-inventory 读取 {{ inventory_source }} 失败，详见上方 ok:false JSON"
+      when: inv_dump.rc != 0
+
+    - name: Build hosts JSON from [windows] group
+      set_fact:
+        result_json: >-
+          {% set inv = (inv_dump.stdout | default('{}')) | from_json %}
+          {% set win = inv.get('windows', {}) %}
+          {% set hostvars = inv.get('_meta', {}).get('hostvars', {}) %}
+          {% set ns = namespace(entries=[]) %}
+          {% for h in win.get('hosts', []) %}
+          {%   set hv = hostvars.get(h, {}) %}
+          {%   set ip = hv.get('ansible_host', h) %}
+          {%   set ns.entries = ns.entries + [{'hostname': h, 'ip': ip, 'group': 'windows'}] %}
           {% endfor %}
           {{ {'ok': true, 'data': {'hosts': ns.entries}} | to_json }}
-
-    - name: Trim JSON output
-      set_fact:
-        result_json: "{{ result_json_raw | trim }}"
 
     # 注意：必须以 msg 打印标准契约 {"ok":true,"data":{...}} 单行 JSON，
     # Django 侧 parse_host_json 只解包 result.stdout/stdout/msg 三种键。
