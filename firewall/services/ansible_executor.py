@@ -120,6 +120,7 @@ def parse_host_json(stdout: str, host_ip: str) -> dict | None:
 
     playbook 用 `debug: var=result.stdout` 打印 ps1 的单行 JSON，输出中混有
     PLAY/TASK/RECAP 行。定位 `ok: [host_ip]` 段，取第一个 `{` 到最后一个 `}` 解析。
+    兼容：`[ip -> localhost]` 委派段、stdout_lines 分行、CLIXML 包裹、stdout 夹带噪声行。
     """
     if not stdout or not host_ip:
         return None
@@ -130,8 +131,10 @@ def parse_host_json(stdout: str, host_ip: str) -> dict | None:
         logger.warning('主机 %s unreachable/failed，无法提取 JSON', host_ip)
         return None
 
-    # 同一主机可能有多个 ok/changed 段（run script、debug 等），逐段尝试提取
-    matches = list(re.finditer(rf'(?:ok|changed):\s*\[{escaped}\][^\n]*', stdout))
+    # 同一主机可能有多个 ok/changed 段（run script、debug 等），逐段尝试提取。
+    # 注意 delegate_to: localhost 的段形如 `ok: [ip -> localhost]`，也允许匹配。
+    matches = list(re.finditer(
+        rf'(?:ok|changed):\s*\[{escaped}(?:\s*->\s*[^\]]+)?\][^\n]*', stdout))
     if not matches:
         logger.warning('ansible 输出中未找到主机 %s 的 ok 段', host_ip)
         return None
@@ -152,11 +155,13 @@ def parse_host_json(stdout: str, host_ip: str) -> dict | None:
             for key in ('result.stdout', 'stdout', 'msg'):
                 val = payload.get(key)
                 if isinstance(val, str) and '{' in val:
-                    try:
-                        payload = json.loads(val)
-                    except (ValueError, TypeError):
-                        payload = None
+                    payload = _extract_ok_json(val)
                     break
+            else:
+                # win_shell 的 stdout_lines：按行拼接后再试（CLIXML/换行切分场景）
+                lines = payload.get('result.stdout_lines') or payload.get('stdout_lines')
+                if isinstance(lines, list):
+                    payload = _extract_ok_json('\n'.join(str(x) for x in lines))
 
         if not isinstance(payload, dict) or 'ok' not in payload:
             continue
@@ -166,8 +171,29 @@ def parse_host_json(stdout: str, host_ip: str) -> dict | None:
             return None
         return payload.get('data')
 
-    logger.warning('主机 %s 的 ansible 输出中未提取到有效 JSON', host_ip)
+    # 解析失败时输出 stdout 片段，便于直接定位真实格式（只截断不遗漏）
+    logger.warning('主机 %s 的 ansible 输出中未提取到有效 JSON，stdout 前600字符: %r',
+                   host_ip, stdout[:600])
     return None
+
+
+def _extract_ok_json(text: str):
+    """从一段字符串中提取 ps1 输出的 {"ok":...} JSON 本体。
+    先直接 json.loads；失败则剥离 CLIXML/XML 标签、截取 {"ok" 起至配对的尾括号。"""
+    try:
+        return json.loads(text)
+    except (ValueError, TypeError):
+        pass
+    # CLIXML 包裹（powershell 子进程经 WinRM 时可能出现）：剥掉所有 <...> 标签
+    if '#< CLIXML' in text or '<Objs' in text:
+        text = re.sub(r'<[^>]+>', '', text)
+    inner = text.find('{"ok"')
+    if inner == -1:
+        return None
+    try:
+        return json.loads(text[inner:text.rfind('}') + 1])
+    except (ValueError, TypeError):
+        return None
 
 
 def _loads_brace_json(text: str):

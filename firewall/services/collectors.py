@@ -49,17 +49,29 @@ def _mark_failed(host: FirewallHost, status: str = 'failed'):
     host.save(update_fields=['last_ansible_status', 'updated_at'])
 
 
+def _mark_parse_failed(host: FirewallHost):
+    """playbook 已成功执行但输出解析失败：主机真实在线，只标记解析异常，
+    不动 is_online（避免"解析故障被误判为离线"导致后续采集被跳过）。"""
+    host.last_ansible_status = 'parse_failed'
+    host.save(update_fields=['last_ansible_status', 'updated_at'])
+
+
 def collect_host_status(host_id) -> bool:
     """Collect-FwStatus → 更新 firewall_status/profiles_detail/is_online/last_*。"""
     host = _get_host(host_id)
     res = run_playbook('collect_status.yml', {'target_host': host.ip},
                        name='collect_status')
     if not res['ok']:
-        _mark_failed(host)
+        # 输出含 unreachable 才是真离线；模块缺失/脚本错误等主机其实在线
+        blob = (res.get('stdout', '') + res.get('error', '')).lower()
+        if 'unreachable' in blob:
+            _mark_unreachable(host)
+        else:
+            _mark_failed(host)
         return False
     data = parse_host_json(res['stdout'], host.ip)
     if data is None:
-        _mark_unreachable(host)
+        _mark_parse_failed(host)
         return False
 
     profiles = data.get('profiles') or {}
@@ -108,11 +120,16 @@ def collect_host_rules(host_id) -> int:
     res = run_playbook('collect_rules.yml', {'target_host': host.ip},
                        name='collect_rules')
     if not res['ok']:
-        _mark_failed(host)
+        # 输出含 unreachable 才是真离线；模块缺失/脚本错误等主机其实在线
+        blob = (res.get('stdout', '') + res.get('error', '')).lower()
+        if 'unreachable' in blob:
+            _mark_unreachable(host)
+        else:
+            _mark_failed(host)
         return 0
     data = parse_host_json(res['stdout'], host.ip)
     if data is None:
-        _mark_unreachable(host)
+        _mark_parse_failed(host)
         return 0
 
     rules = data.get('rules') or []
@@ -167,11 +184,16 @@ def collect_host_connections(host_id) -> int:
     res = run_playbook('collect_connections.yml', {'target_host': host.ip},
                        name='collect_connections')
     if not res['ok']:
-        _mark_failed(host)
+        # 输出含 unreachable 才是真离线；模块缺失/脚本错误等主机其实在线
+        blob = (res.get('stdout', '') + res.get('error', '')).lower()
+        if 'unreachable' in blob:
+            _mark_unreachable(host)
+        else:
+            _mark_failed(host)
         return 0
     data = parse_host_json(res['stdout'], host.ip)
     if data is None:
-        _mark_unreachable(host)
+        _mark_parse_failed(host)
         return 0
 
     now = timezone.now()
@@ -246,7 +268,7 @@ def collect_host_events(host_id) -> int:
                 host.profiles_detail = detail
                 host.save(update_fields=['profiles_detail', 'updated_at'])
         else:
-            _mark_unreachable(host)
+            _mark_parse_failed(host)
     else:
         _mark_failed(host)
         logger.warning('主机 %s 防火墙日志采集失败: %s', host.ip, res['error'])
@@ -259,7 +281,7 @@ def collect_host_events(host_id) -> int:
         if data is not None:
             events.extend(data.get('events') or [])
         else:
-            _mark_unreachable(host)
+            _mark_parse_failed(host)
     else:
         _mark_failed(host)
         logger.warning('主机 %s 安全事件采集失败: %s', host.ip, res['error'])
