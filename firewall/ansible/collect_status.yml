@@ -8,10 +8,26 @@
 - name: Collect firewall status
   hosts: "{{ target_host }}"
   gather_facts: false
+  vars:
+    # PowerShell 脚本目录：默认 <playbook目录>/../powershell，可用 -e ps_dir= 覆盖。
+    # 注意不能命名为 ps_dir 再引用自身（Ansible 惰性模板会递归），故用 ps_dir_resolved。
+    ps_dir_resolved: "{{ ps_dir | default(playbook_dir ~ '/../powershell', true) }}"
   tasks:
+    - name: Check Collect-FwStatus.ps1 exists on Ansible controller
+      stat:
+        path: "{{ ps_dir_resolved }}/Collect-FwStatus.ps1"
+      delegate_to: localhost
+      become: false
+      register: ps_stat_collect_fwstatus
+
+    - name: Fail clearly when Collect-FwStatus.ps1 missing
+      fail:
+        msg: "Ansible 控制器上找不到脚本 {{ ps_dir_resolved }}/Collect-FwStatus.ps1 ，请把仓库 firewall/powershell/ 目录放到该位置，或用 -e ps_dir= 指定脚本目录"
+      when: not ps_stat_collect_fwstatus.stat.exists
+
     - name: Copy Collect-FwStatus.ps1 to target
       win_copy:
-        src: ../powershell/Collect-FwStatus.ps1
+        src: "{{ ps_dir_resolved }}/Collect-FwStatus.ps1"
         dest: C:\Windows\Temp\AUTO-ITOPS\Collect-FwStatus.ps1
 
     - name: Run Collect-FwStatus.ps1

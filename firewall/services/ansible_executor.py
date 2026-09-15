@@ -76,11 +76,21 @@ def run_playbook(playbook: str, extra_vars: dict, timeout: int = 300,
         record.status = 'failed'
         record.save()
         logger.warning('playbook %s 执行失败 exit=%s task_ref=%s', playbook, exit_status, task_ref)
+        # stderr 常只有无害 WARNING（如 group name 提示），真正的 fatal 在 stdout。
+        # 优先提取 stdout 中的 fatal/FAILED/ERROR 行作为错误摘要，便于日志直接定位。
+        fatal_lines = [ln.strip() for ln in out.splitlines()
+                       if ('fatal:' in ln or 'FAILED!' in ln or 'ERROR!' in ln)]
+        parts = []
+        if fatal_lines:
+            parts.append(' | '.join(fatal_lines[-3:])[:1000])
+        if err.strip():
+            parts.append(err.strip()[:500])
+        error_summary = ' ; '.join(parts)[:1500] or f'ansible-playbook 退出码={exit_status}'
         return {
             'ok': False,
             'task_ref': task_ref,
             'stdout': out,
-            'error': err or f'ansible-playbook 退出码={exit_status}',
+            'error': error_summary,
         }
     except TimeoutError as exc:
         # paramiko exec_command 超时抛 socket.timeout（即 TimeoutError）

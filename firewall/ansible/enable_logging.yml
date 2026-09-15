@@ -8,10 +8,26 @@
 - name: Enable firewall logging
   hosts: "{{ target_host }}"
   gather_facts: false
+  vars:
+    # PowerShell 脚本目录：默认 <playbook目录>/../powershell，可用 -e ps_dir= 覆盖。
+    # 注意不能命名为 ps_dir 再引用自身（Ansible 惰性模板会递归），故用 ps_dir_resolved。
+    ps_dir_resolved: "{{ ps_dir | default(playbook_dir ~ '/../powershell', true) }}"
   tasks:
+    - name: Check Enable-FwLogging.ps1 exists on Ansible controller
+      stat:
+        path: "{{ ps_dir_resolved }}/Enable-FwLogging.ps1"
+      delegate_to: localhost
+      become: false
+      register: ps_stat_enable_fwlogging
+
+    - name: Fail clearly when Enable-FwLogging.ps1 missing
+      fail:
+        msg: "Ansible 控制器上找不到脚本 {{ ps_dir_resolved }}/Enable-FwLogging.ps1 ，请把仓库 firewall/powershell/ 目录放到该位置，或用 -e ps_dir= 指定脚本目录"
+      when: not ps_stat_enable_fwlogging.stat.exists
+
     - name: Copy Enable-FwLogging.ps1 to target
       win_copy:
-        src: ../powershell/Enable-FwLogging.ps1
+        src: "{{ ps_dir_resolved }}/Enable-FwLogging.ps1"
         dest: C:\Windows\Temp\AUTO-ITOPS\Enable-FwLogging.ps1
 
     - name: Run Enable-FwLogging.ps1
