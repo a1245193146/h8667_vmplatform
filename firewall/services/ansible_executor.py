@@ -150,18 +150,26 @@ def parse_host_json(stdout: str, host_ip: str) -> dict | None:
         if payload is None:
             continue
 
-        # 解包 debug var=result.stdout 的外层 {"result.stdout": "<json str>"}
+        # 解包 debug var=result.stdout 的外层 {"result.stdout": ...}
+        # 新版 ansible-core 回调会把"内容是合法JSON的字符串"直接渲染成嵌套字典，
+        # 因此 val 可能是 dict（已解析好）也可能是 str（需自行解析），两种都要兼容。
         if isinstance(payload, dict):
+            unwrapped = None
             for key in ('result.stdout', 'stdout', 'msg'):
                 val = payload.get(key)
-                if isinstance(val, str) and '{' in val:
-                    payload = _extract_ok_json(val)
+                if isinstance(val, dict) and 'ok' in val:
+                    unwrapped = val            # 回调已把 JSON 字符串渲染成字典
                     break
-            else:
+                if isinstance(val, str) and '{' in val:
+                    unwrapped = _extract_ok_json(val)
+                    break
+            if unwrapped is None:
                 # win_shell 的 stdout_lines：按行拼接后再试（CLIXML/换行切分场景）
                 lines = payload.get('result.stdout_lines') or payload.get('stdout_lines')
                 if isinstance(lines, list):
-                    payload = _extract_ok_json('\n'.join(str(x) for x in lines))
+                    unwrapped = _extract_ok_json('\n'.join(str(x) for x in lines))
+            if unwrapped is not None:
+                payload = unwrapped
 
         if not isinstance(payload, dict) or 'ok' not in payload:
             continue
