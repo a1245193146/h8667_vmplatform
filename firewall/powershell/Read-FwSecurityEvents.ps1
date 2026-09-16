@@ -38,8 +38,9 @@ function Convert-ProtocolNumber {
 function Convert-DirectionValue {
     param([string]$Dir)
     if ([string]::IsNullOrEmpty($Dir)) { return '' }
-    if ($Dir -match '2148013' -or $Dir -eq '1') { return 'inbound' }
-    if ($Dir -match '2148014' -or $Dir -eq '2') { return 'outbound' }
+    # 过滤平台事件 Direction 常见取值：%%14592/%%2148013/1 = 入站，%%14593/%%2148014/2 = 出站
+    if ($Dir -match '14592' -or $Dir -match '2148013' -or $Dir -eq '1') { return 'inbound' }
+    if ($Dir -match '14593' -or $Dir -match '2148014' -or $Dir -eq '2') { return 'outbound' }
     return ''
 }
 
