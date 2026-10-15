@@ -50,11 +50,15 @@ def resize_windows_partition(vm_ip, drive_letter=''):
     if drive_letter:
         drive_args = f' -e drive_letter={drive_letter}'
 
+    # 扩容目标是 Windows 虚机(windows_extend.yml)，Windows 机登记在 windows_dynamic.ini(winrm)，
+    # 不在 hosts(Linux 清单)。故 -i 用 windows_list；未配置时才回退 INVENTORY。
+    resize_inventory = config.get("windows_list") or config["INVENTORY"]
+
     cmd = f'''
     export PYTHONPATH=/opt/venv/lib/python3.12/site-packages:$PYTHONPATH && \
     cd {config["WORKDIR"]} && \
     /usr/bin/ansible-playbook \
-    -i {config["INVENTORY"]} \
+    -i {resize_inventory} \
     {config["PLAYBOOK"]} \
     -l {vm_ip}{drive_args} \
     -v

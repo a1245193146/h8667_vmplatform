@@ -24,6 +24,18 @@ AUTO_PREFIX = 'AUTO-ITOPS-'
 # 离线主机连续失败达到该次数后，跳过非状态采集（仅探测状态等待恢复）
 _OFFLINE_SKIP_THRESHOLD = 3
 
+# 单轮 Read-FwLog 最多 2000 条。日志繁忙的主机一轮追不平，多追两轮，
+# 让 truncated=true 只代表"真的异常"，而不是每台机每轮都在报、报久了就没人看。
+_FWLOG_MAX_ROUNDS = 3
+_FWLOG_MAX_LINES = 2000
+
+
+def _as_int(value, default=0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
 
 def _rule_fingerprint(direction, protocol, program, remote_address,
                       remote_port, local_port='') -> str:
@@ -243,35 +255,63 @@ def collect_host_connections(host_id) -> int:
 
 def collect_host_events(host_id) -> int:
     """Read-FwLog(offset 存 host.profiles_detail['log_offset']) + Read-FwSecurityEvents
-    → event_ingest 统一去重；返回新增条数。单步失败继续另一步。"""
+    → event_ingest 统一去重；返回新增条数。单步失败继续另一步。
+
+    Read-FwLog 的截断披露（truncated / partial_tail / oversized_skipped /
+    skipped_bytes）必须原样存进 profiles_detail['fwlog'] 并在主机详情页展示。
+    这几个字段是"本轮没采完"的唯一证据，丢掉就等于把截断藏起来。
+    """
     host = _get_host(host_id)
     events = []
 
-    offset = 0
-    try:
-        offset = int((host.profiles_detail or {}).get('log_offset', 0) or 0)
-    except (TypeError, ValueError):
-        offset = 0
+    offset = _as_int((host.profiles_detail or {}).get('log_offset', 0))
+    fwlog = {}
 
-    res = run_playbook('collect_fwlog.yml',
-                       {'target_host': host.ip, 'offset': offset,
-                        'max_lines': 2000},
-                       name='collect_fwlog')
-    if res['ok']:
+    for round_no in range(_FWLOG_MAX_ROUNDS):
+        res = run_playbook('collect_fwlog.yml',
+                           {'target_host': host.ip, 'offset': offset,
+                            'max_lines': _FWLOG_MAX_LINES},
+                           name='collect_fwlog')
+        if not res['ok']:
+            _mark_failed(host)
+            logger.warning('主机 %s 防火墙日志采集失败: %s', host.ip, res['error'])
+            break
+
         data = parse_host_json(res['stdout'], host.ip)
-        if data is not None:
-            events.extend(data.get('events') or [])
-            new_offset = data.get('offset')
-            if new_offset is not None:
-                detail = dict(host.profiles_detail or {})
-                detail['log_offset'] = new_offset
-                host.profiles_detail = detail
-                host.save(update_fields=['profiles_detail', 'updated_at'])
-        else:
+        if data is None:
             _mark_parse_failed(host)
-    else:
-        _mark_failed(host)
-        logger.warning('主机 %s 防火墙日志采集失败: %s', host.ip, res['error'])
+            break
+
+        events.extend(data.get('events') or [])
+        if data.get('offset') is not None:
+            offset = _as_int(data.get('offset'), offset)
+
+        fwlog = {
+            'offset': offset,
+            'rounds': round_no + 1,
+            'events_returned': _as_int(data.get('events_returned')),
+            'truncated': bool(data.get('truncated')),
+            'partial_tail': bool(data.get('partial_tail')),
+            'oversized_skipped': bool(data.get('oversized_skipped')),
+            'skipped_bytes': _as_int(data.get('skipped_bytes')),
+            'collected_at': timezone.localtime().isoformat(timespec='seconds'),
+        }
+        if not fwlog['truncated']:
+            break
+
+    detail = dict(host.profiles_detail or {})
+    detail['log_offset'] = offset
+    if fwlog:
+        detail['fwlog'] = fwlog
+        if fwlog['truncated']:
+            logger.warning('主机 %s 防火墙日志追了 %d 轮仍未采完，剩余 %d 字节，'
+                           '可考虑调大 max_lines', host.ip, fwlog['rounds'],
+                           fwlog['skipped_bytes'])
+        if fwlog['oversized_skipped']:
+            logger.warning('主机 %s 防火墙日志出现无换行符的异常内容块，'
+                           '已跳过并推进偏移（不卡死采集）', host.ip)
+    host.profiles_detail = detail
+    host.save(update_fields=['profiles_detail', 'updated_at'])
 
     res = run_playbook('collect_events.yml',
                        {'target_host': host.ip, 'since_minutes': 10},

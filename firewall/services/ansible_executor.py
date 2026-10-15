@@ -6,6 +6,7 @@
 import json
 import logging
 import re
+import time
 import uuid
 
 import paramiko
@@ -16,6 +17,28 @@ from firewall.models import AnsibleTaskRecord
 
 logger = logging.getLogger(__name__)
 
+# playbook 名前缀 → 来源模块。各模块的 playbook 命名本来就是按前缀分的
+# （av_* 属病毒检测、ops_* 属运维分析），据此给执行留痕打模块标签，
+# 19 处既有调用点一处都不用改。
+_MODULE_BY_PREFIX = (('av_', 'antivirus'), ('ops_', 'opsanalysis'))
+
+
+def _guess_module(playbook, subdir):
+    """尽力判定 playbook 的来源模块，仅用于日志页按模块筛选。
+
+    这是"分类标签"不是安全边界：判错了顶多筛选不便，不影响执行与鉴权。
+    """
+    p = (playbook or '').lower()
+    for prefix, mod in _MODULE_BY_PREFIX:
+        if p.startswith(prefix):
+            return mod
+    s = (subdir or '').lower()
+    if 'opsanalysis' in s:
+        return 'opsanalysis'
+    if 'antivirus' in s:
+        return 'antivirus'
+    return 'firewall'
+
 
 def _shell_single_quote(s: str) -> str:
     """把字符串安全放进单引号：' -> '"'"'"""
@@ -23,13 +46,36 @@ def _shell_single_quote(s: str) -> str:
 
 
 def run_playbook(playbook: str, extra_vars: dict, timeout: int = 300,
-                 initiated_by: str = 'system', name: str = '') -> dict:
+                 initiated_by: str = 'system', name: str = '',
+                 subdir: str = '', inventory: str = '', module: str = '') -> dict:
     """paramiko SSH 到 Ansible 服务器(复用 settings.ANSIBLE_CONFIG)执行 ansible-playbook
-    firewall/ansible/<playbook> -e extra_vars；记录 AnsibleTaskRecord(task_ref=uuid4)；
-    返回 {'ok':bool,'task_ref':str,'stdout':str,'error':str}；超时不抛异常，status='timeout'。"""
+    <subdir>/<playbook> -i <inventory> -e extra_vars；记录 AnsibleTaskRecord(task_ref=uuid4)；
+    返回 {'ok':bool,'task_ref':str,'stdout':str,'error':str}；超时不抛异常，status='timeout'。
+
+    subdir/inventory 供其他模块（如 opsanalysis）复用本执行器：
+      - subdir 为空则取 settings.ANSIBLE_CONFIG['PLAYBOOK_SUBDIR']（默认 'playbooks/firewall'），
+        即 firewall/antivirus 的 playbook 在控制机上的真实目录；
+      - inventory 为空则取 settings.ANSIBLE_CONFIG['INVENTORY']，保持既有调用零回归。
+    当 subdir 解析为 firewall 目录时，执行前先 best-effort 把本地 firewall/ansible、
+    firewall/powershell 增量同步到控制机（见 playbook_sync），免去人工拷贝。
+
+    每次执行另写一条 sysmanage.ExecLog 留痕（用 task_ref 与 AnsibleTaskRecord 关联）。
+    module 留空则按 playbook 名前缀自动判定。"""
     config = settings.ANSIBLE_CONFIG
     extra_vars = extra_vars or {}
     task_ref = uuid.uuid4().hex
+
+    sub = (subdir or config.get('PLAYBOOK_SUBDIR') or 'playbooks/firewall').strip('/')
+    # firewall 类 playbook：先把 yml/ps1 自动推到控制机，避免"playbook could not be found"
+    try:
+        from firewall.services import playbook_sync
+        if sub == playbook_sync.playbook_subdir().strip('/'):
+            sync = playbook_sync.ensure_firewall_synced()
+            if not sync.get('ok'):
+                logger.warning('firewall 脚本同步失败（将继续尝试执行 %s）：%s',
+                               playbook, sync.get('error'))
+    except Exception:
+        logger.exception('firewall 脚本同步异常（忽略，继续执行 %s）', playbook)
 
     record = AnsibleTaskRecord.objects.create(
         task_ref=task_ref,
@@ -40,15 +86,48 @@ def run_playbook(playbook: str, extra_vars: dict, timeout: int = 300,
         initiated_by=initiated_by or 'system',
     )
 
+    # firewall/antivirus 的目标全是 Windows，登记在 windows_dynamic.ini(winrm)；默认就用它，
+    # 避免落到 hosts(Linux 清单)导致 'no hosts matched'。需要别的 inventory 的调用方
+    # （ops 的 Linux 采集、localhost 任务）都显式传 inventory，不受此默认影响。
+    inv = inventory or config.get('windows_list') or config['INVENTORY']
+    pb_path = f'{sub}/{playbook}'
     extra_json = json.dumps(extra_vars, ensure_ascii=False)
+    # 关键：控制机上 /usr/bin/ansible-playbook（系统 ansible）需要把 venv 的 site-packages
+    # 挂到 PYTHONPATH 才能加载 pywinrm 等 WinRM 连接插件；否则连 Windows 会失败并被报成
+    # unreachable。运维手动执行时登录 shell 已激活 venv 故正常——这正是"手动 win_ping 通、
+    # 平台跑不通"的真因。此处与 resize.services.ansible_service 采用同一套已验证的写法，
+    # venv 路径可用 ANSIBLE_CONFIG['PYTHONPATH'] 覆盖（留空则不加 export）。
+    pypath = config.get('PYTHONPATH', '/opt/venv/lib/python3.12/site-packages')
+    apb = config.get('PLAYBOOK_BIN') or '/usr/bin/ansible-playbook'
+    export = f'export PYTHONPATH={pypath}:$PYTHONPATH && ' if pypath else ''
     cmd = (
+        f'{export}'
         f'cd {config["WORKDIR"]} && '
-        f'/usr/bin/ansible-playbook '
-        f'-i {config["INVENTORY"]} '
-        f'firewall/ansible/{playbook} '
+        f'{apb} '
+        f'-i {inv} '
+        f'{pb_path} '
         f'-e {_shell_single_quote(extra_json)}'
     )
     logger.info('执行 Ansible playbook: %s task_ref=%s cmd=%s', playbook, task_ref, cmd)
+
+    started = time.monotonic()
+    # 命令里的 -e JSON 含目标主机/路径等业务参数，凭据只在 paramiko.connect 用，
+    # 不进命令行；execlog.record 仍会兜底脱敏，防止将来有人把密码塞进 extra_vars。
+    log_module = module or _guess_module(playbook, sub)
+
+    def _log(status, out, err, rc=None):
+        try:
+            from sysmanage.services import execlog
+            execlog.record(
+                command=cmd, rc=rc, status=status, stdout=out or '', stderr=err or '',
+                duration_ms=int((time.monotonic() - started) * 1000),
+                kind='playbook', module=log_module,
+                target=str(extra_vars.get('target_host', '') or '') or inv,
+                task_ref=task_ref, initiated_by=initiated_by or 'system',
+                note=playbook,
+            )
+        except Exception:
+            logger.warning('playbook 执行留痕写入失败（忽略）', exc_info=True)
 
     ssh = None
     try:
@@ -71,6 +150,7 @@ def run_playbook(playbook: str, extra_vars: dict, timeout: int = 300,
             record.status = 'success'
             record.save()
             logger.info('playbook %s 执行成功 task_ref=%s', playbook, task_ref)
+            _log('success', out, err, exit_status)
             return {'ok': True, 'task_ref': task_ref, 'stdout': out, 'error': ''}
 
         record.status = 'failed'
@@ -86,6 +166,7 @@ def run_playbook(playbook: str, extra_vars: dict, timeout: int = 300,
         if err.strip():
             parts.append(err.strip()[:500])
         error_summary = ' ; '.join(parts)[:1500] or f'ansible-playbook 退出码={exit_status}'
+        _log('failed', out, err, exit_status)
         return {
             'ok': False,
             'task_ref': task_ref,
@@ -99,6 +180,7 @@ def run_playbook(playbook: str, extra_vars: dict, timeout: int = 300,
         record.finished_at = timezone.now()
         record.save()
         logger.error('playbook %s 执行超时 task_ref=%s', playbook, task_ref)
+        _log('timeout', '', f'执行超时(>{timeout}s): {exc}', None)
         return {'ok': False, 'task_ref': task_ref, 'stdout': '', 'error': f'timeout: {exc}'}
     except Exception as exc:  # SSH 失败等一切异常均不抛出
         record.status = 'failed'
@@ -106,6 +188,9 @@ def run_playbook(playbook: str, extra_vars: dict, timeout: int = 300,
         record.finished_at = timezone.now()
         record.save()
         logger.exception('playbook %s 执行异常 task_ref=%s', playbook, task_ref)
+        # 归 error 而不是 failed：连不上控制机时 playbook 根本没跑起来，
+        # 报成"playbook 执行失败"会把排查方向带偏到 playbook 内容上。
+        _log('error', '', f'{type(exc).__name__}: {exc}', None)
         return {'ok': False, 'task_ref': task_ref, 'stdout': '', 'error': str(exc)}
     finally:
         if ssh is not None:

@@ -3,6 +3,8 @@
 # 对应脚本: firewall/powershell/Read-FwLog.ps1
 # 用法: ansible-playbook firewall/ansible/collect_fwlog.yml -e target_host=x.x.x.x -e offset=0 -e max_lines=2000
 # 输出: ps1 的单行 JSON 原样打印到 stdout
+#       其中 truncated / partial_tail / oversized_skipped / skipped_bytes 必须原样透传给调用方，
+#       它们说明"这台机本轮没采完"，丢掉就等于把截断藏起来。
 # 作者: AUTO-GENERATED (Agent B - firewall automation module)
 
 - name: Collect firewall log tail
@@ -25,6 +27,11 @@
         msg: "Ansible 控制器上找不到脚本 {{ ps_dir_resolved }}/Read-FwLog.ps1 ，请把仓库 firewall/powershell/ 目录放到该位置，或用 -e ps_dir= 指定脚本目录"
       when: not ps_stat_read_fwlog.stat.exists
 
+    - name: Ensure AUTO-ITOPS temp dir exists on target
+      win_file:
+        path: C:\Windows\Temp\AUTO-ITOPS
+        state: directory
+
     - name: Copy Read-FwLog.ps1 to target
       win_copy:
         src: "{{ ps_dir_resolved }}/Read-FwLog.ps1"
@@ -36,6 +43,7 @@
         -File C:\Windows\Temp\AUTO-ITOPS\Read-FwLog.ps1
         -Offset {{ offset | default(0) }}
         -MaxLines {{ max_lines | default(2000) }}
+        -MaxBytes {{ max_bytes | default(8388608) }}
       register: result
 
     - name: Print JSON result

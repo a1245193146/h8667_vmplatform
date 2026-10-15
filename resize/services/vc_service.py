@@ -1,4 +1,5 @@
 import ssl
+import socket
 import time
 import logging
 
@@ -17,16 +18,26 @@ SAFE_RESERVED_GB = 100
 
 def connect_vcenter():
 
-    logger.info('连接vCenter')
+    host = settings.VCENTER_CONFIG['HOST']
+    logger.info('连接vCenter: %s', host)
 
     context = ssl._create_unverified_context()
 
-    si = SmartConnect(
-        host=settings.VCENTER_CONFIG['HOST'],
-        user=settings.VCENTER_CONFIG['USERNAME'],
-        pwd=settings.VCENTER_CONFIG['PASSWORD'],
-        sslContext=context
-    )
+    try:
+        si = SmartConnect(
+            host=host,
+            user=settings.VCENTER_CONFIG['USERNAME'],
+            pwd=settings.VCENTER_CONFIG['PASSWORD'],
+            sslContext=context
+        )
+    except socket.gaierror as e:
+        # getaddrinfo failed：HOST 是解析不了的主机名（对 IP 字面量不会触发此错）
+        raise Exception(
+            '无法解析 vCenter 地址 "%s"（DNS/hosts 解析失败：%s）。请把 '
+            "VCENTER_CONFIG['HOST'] 改成可解析的主机名或直接用 vCenter 的 IP"
+            '（可设环境变量 VMP_VCENTER_HOST=<IP>），或在应用服务器 hosts/DNS 里加解析。'
+            % (host, e)
+        )
 
     return si
 

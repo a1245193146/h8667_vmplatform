@@ -25,6 +25,11 @@
         msg: "Ansible 控制器上找不到脚本 {{ ps_dir_resolved }}/Collect-FwConnections.ps1 ，请把仓库 firewall/powershell/ 目录放到该位置，或用 -e ps_dir= 指定脚本目录"
       when: not ps_stat_collect_fwconnections.stat.exists
 
+    - name: Ensure AUTO-ITOPS temp dir exists on target
+      win_file:
+        path: C:\Windows\Temp\AUTO-ITOPS
+        state: directory
+
     - name: Copy Collect-FwConnections.ps1 to target
       win_copy:
         src: "{{ ps_dir_resolved }}/Collect-FwConnections.ps1"
