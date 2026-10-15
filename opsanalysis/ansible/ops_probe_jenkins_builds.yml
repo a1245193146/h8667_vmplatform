@@ -1,0 +1,41 @@
+---
+# ops_probe_jenkins_builds.yml — Jenkins 最近构建只读探测（服务故障排查）
+# 脚本: opsanalysis/scripts/probe_jenkins_builds.py
+# 用法: ansible-playbook opsanalysis/ansible/ops_probe_jenkins_builds.yml -e target_host=<jenkins_ip> -e jenkins_job=h5858_ywops -e jenkins_jobs_dir=/var/lib/jenkins/jobs
+# 红线: 只读，仅读 build.xml/changelog.xml，绝不触发构建
+- name: Probe jenkins builds
+  hosts: "{{ target_host }}"
+  gather_facts: false
+  vars:
+    script_dir_resolved: "{{ script_dir | default(playbook_dir ~ '/../scripts', true) }}"
+    remote_script: /tmp/AUTO-ITOPS/probe_jenkins_builds.py
+    jobs_dir_resolved: "{{ jenkins_jobs_dir | default('/var/lib/jenkins/jobs', true) }}"
+    max_builds_resolved: "{{ max_builds | default(10, true) }}"
+  tasks:
+    - name: Check probe_jenkins_builds.py exists on controller
+      stat:
+        path: "{{ script_dir_resolved }}/probe_jenkins_builds.py"
+      delegate_to: localhost
+      become: false
+      register: st_jb
+    - name: Fail clearly when probe_jenkins_builds.py missing
+      fail:
+        msg: "控制器上找不到 {{ script_dir_resolved }}/probe_jenkins_builds.py ，请同步 opsanalysis/scripts/ 目录"
+      when: not st_jb.stat.exists
+    - name: Ensure remote temp dir
+      file: { path: /tmp/AUTO-ITOPS, state: directory, mode: '0755' }
+    - name: Copy probe_jenkins_builds.py
+      copy: { src: "{{ script_dir_resolved }}/probe_jenkins_builds.py", dest: "{{ remote_script }}", mode: '0755' }
+    - name: Run probe_jenkins_builds.py
+      shell: >-
+        PY=$(command -v python3 || command -v python2 || command -v python);
+        "$PY" {{ remote_script }} --jobs-dir '{{ jobs_dir_resolved }}'
+        --job '{{ jenkins_job }}' --max-builds {{ max_builds_resolved }}
+      args: { executable: /bin/bash }
+      register: result
+      changed_when: false
+    - name: Print JSON result
+      debug: { var: result.stdout }
+    - name: Cleanup remote temp script
+      file: { path: "{{ remote_script }}", state: absent }
+      changed_when: false

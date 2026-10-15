@@ -1,0 +1,42 @@
+---
+# ops_probe_nginx_logs.yml — Nginx 日志窗口只读统计（服务故障排查）
+# 脚本: opsanalysis/scripts/probe_nginx_logs.py
+# 用法: ansible-playbook opsanalysis/ansible/ops_probe_nginx_logs.yml -e target_host=<nginx_ip> -e access_logs=/path/a.log -e error_logs=/path/e.log -e window_min=30 -e match_tokens=192.168.2.188:8878,example.com
+# match_tokens: 本服务的归属标识(后端IP:端口 / 域名, 逗号分隔)。error 日志通常全局共享, 只统计命中这些 token 的行(属于本服务), 避免把别的服务的 connection refused 算进来。
+# 红线: 只读，仅读日志尾部，绝不改写/轮转/重载 nginx
+- name: Probe nginx logs
+  hosts: "{{ target_host }}"
+  gather_facts: false
+  vars:
+    script_dir_resolved: "{{ script_dir | default(playbook_dir ~ '/../scripts', true) }}"
+    remote_script: /tmp/AUTO-ITOPS/probe_nginx_logs.py
+    window_min_resolved: "{{ window_min | default(30, true) }}"
+  tasks:
+    - name: Check probe_nginx_logs.py exists on controller
+      stat:
+        path: "{{ script_dir_resolved }}/probe_nginx_logs.py"
+      delegate_to: localhost
+      become: false
+      register: st_nl
+    - name: Fail clearly when probe_nginx_logs.py missing
+      fail:
+        msg: "控制器上找不到 {{ script_dir_resolved }}/probe_nginx_logs.py ，请同步 opsanalysis/scripts/ 目录"
+      when: not st_nl.stat.exists
+    - name: Ensure remote temp dir
+      file: { path: /tmp/AUTO-ITOPS, state: directory, mode: '0755' }
+    - name: Copy probe_nginx_logs.py
+      copy: { src: "{{ script_dir_resolved }}/probe_nginx_logs.py", dest: "{{ remote_script }}", mode: '0755' }
+    - name: Run probe_nginx_logs.py
+      shell: >-
+        PY=$(command -v python3 || command -v python2 || command -v python);
+        "$PY" {{ remote_script }} --access '{{ access_logs | default('', true) }}'
+        --error '{{ error_logs | default('', true) }}' --window-min {{ window_min_resolved }}
+        --match '{{ match_tokens | default('', true) }}'
+      args: { executable: /bin/bash }
+      register: result
+      changed_when: false
+    - name: Print JSON result
+      debug: { var: result.stdout }
+    - name: Cleanup remote temp script
+      file: { path: "{{ remote_script }}", state: absent }
+      changed_when: false

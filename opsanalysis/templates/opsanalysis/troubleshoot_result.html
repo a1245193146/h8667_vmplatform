@@ -1,0 +1,315 @@
+{% extends "resize/base.html" %}
+{% load static %}
+
+{% block title %}服务排查结果 - 信息系统运维平台{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+    <div class="vmp-page-head">
+        <div>
+            <h1>服务排查：{{ analysis.service.canonical_name|default:task.target }}</h1>
+            <p class="vmp-sub">
+                任务 #{{ task.id }}{% if analysis.window_min %} · 窗口：近 {{ analysis.window_min }} 分钟{% endif %}
+                —— 只读关联采集（服务器 / supervisor / nginx / DNS / Jenkins），全程不下发任何变更。
+            </p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{% url 'ops_index' %}" class="btn btn-sm btn-outline-secondary">运维分析</a>
+            <a href="{% url 'ops_troubleshoot_form' %}" class="btn btn-sm btn-primary">新建排查</a>
+        </div>
+    </div>
+
+    {% if task.status != 'success' %}
+    <div class="card">
+        <div class="card-body text-center py-5">
+            {% if task.status == 'failed' %}
+            <div class="text-danger fs-5">排查失败</div>
+            <pre class="vmp-code-block text-start mt-3">{{ task.error }}</pre>
+            <a href="{% url 'ops_troubleshoot_form' %}" class="btn btn-outline-primary">返回重试</a>
+            {% else %}
+            <div class="spinner-border text-primary" role="status"></div>
+            <div class="mt-3 text-muted">正在对 <strong>{{ task.target }}</strong> 进行只读关联采集（服务器/supervisor/nginx/DNS/jenkins）……</div>
+            <div class="mt-2 small text-muted">页面会自动刷新，请稍候。</div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if task.status == 'success' and analysis %}
+    <div class="alert alert-secondary">
+        <span class="vmp-tag vmp-tag-warn">{{ analysis.headline.level }}</span>
+        <strong>{{ analysis.headline.text }}</strong>
+        <div class="small text-muted mt-1">总体判断为<strong>推测</strong>，非因果定论；请结合下方分类证据人工确认。</div>
+    </div>
+
+    {% if analysis.service.supervisor_web_urls %}
+    <div class="mb-3 small">
+        <span class="text-muted">应用日志（supervisor logtail，比翻日志文件省事；点开按提示输入面板账号）：</span>
+        {% for e in analysis.service.supervisor_web_urls %}
+            {% if e.log %}
+            <a class="vmp-tag vmp-tag-accent text-decoration-none" href="{{ e.log }}" target="_blank" rel="noopener"
+               title="{{ e.ip }}:9999/logtail/{{ analysis.service.supervisor_program }}">{{ e.ip }} logtail ↗</a>
+            {% else %}
+            <span class="vmp-tag vmp-tag-mute" title="{{ e.ip }} 未登记 supervisor 程序名，无法拼 logtail 地址">{{ e.ip }}</span>
+            {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="row g-3">
+        <!-- 已确认事实 -->
+        <div class="col-md-6">
+            <div class="card h-100 border-success-subtle">
+                <div class="vmp-card-head is-ok">
+                    <h2>已确认事实（直接观测）</h2>
+                    <span class="vmp-hint">只放采集到的原始观测</span>
+                </div>
+                <ul class="list-group list-group-flush small">
+                    {% for e in analysis.facts %}
+                    <li class="list-group-item">
+                        <div style="white-space:pre-wrap;"><span class="vmp-tag vmp-tag-mute">{{ e.source }}</span> {{ e.summary }}</div>
+                        {% if e.ts %}<div class="text-muted" style="font-size:.75rem;">{{ e.ts|date:"Y-m-d H:i:s" }}</div>{% endif %}
+                    </li>
+                    {% empty %}<li class="list-group-item text-muted">未采集到明确事实信号。</li>{% endfor %}
+                </ul>
+            </div>
+        </div>
+        <!-- 时间关联 -->
+        <div class="col-md-6">
+            <div class="card h-100 border-info-subtle">
+                <div class="vmp-card-head is-info">
+                    <h2>时间关联（仅时间接近，非因果）</h2>
+                    <span class="vmp-hint">同时发生 ≠ 因此发生</span>
+                </div>
+                <ul class="list-group list-group-flush small">
+                    {% for e in analysis.correlations %}
+                    <li class="list-group-item">{{ e.summary }}</li>
+                    {% empty %}<li class="list-group-item text-muted">未发现明显时间关联。</li>{% endfor %}
+                </ul>
+            </div>
+        </div>
+        <!-- 推测原因 -->
+        <div class="col-md-6">
+            <div class="card h-100 border-warning-subtle">
+                <div class="vmp-card-head is-warn">
+                    <h2>推测原因（需人工确认）</h2>
+                    <span class="vmp-hint">未经证实</span>
+                </div>
+                <ul class="list-group list-group-flush small">
+                    {% for e in analysis.inferences %}
+                    <li class="list-group-item">{{ e.summary }}</li>
+                    {% empty %}<li class="list-group-item text-muted">无。</li>{% endfor %}
+                </ul>
+            </div>
+        </div>
+        <!-- 建议检查 -->
+        <div class="col-md-6">
+            <div class="card h-100 border-primary-subtle">
+                <div class="vmp-card-head is-accent">
+                    <h2>建议检查（可执行下一步）</h2>
+                    <span class="vmp-hint">本页只读，执行请到「服务器运维」</span>
+                </div>
+                <ul class="list-group list-group-flush small">
+                    {% for e in analysis.suggestions %}
+                    <li class="list-group-item">{{ e.summary }}</li>
+                    {% empty %}<li class="list-group-item text-muted">无。</li>{% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- 统一时间线 -->
+    <div class="card mt-3">
+        <div class="vmp-card-head">
+            <h2>统一时间线</h2>
+            <span class="vmp-hint">按时间排序，每条都标注证据类型</span>
+        </div>
+        <div class="card-body">
+            <ul class="list-unstyled small mb-0">
+                {% for e in timeline_events %}
+                <li class="mb-2 d-flex gap-2">
+                    <span class="text-muted text-nowrap" style="min-width:130px;">{{ e.ts|date:"m-d H:i:s"|default:"—" }}</span>
+                    <span class="vmp-tag {% if e.kind == 'fact' %}vmp-tag-ok{% elif e.kind == 'correlation' %}vmp-tag-info{% elif e.kind == 'inference' %}vmp-tag-warn{% else %}vmp-tag-accent{% endif %}">{{ e.get_kind_display }}</span>
+                    <span style="white-space:pre-wrap;"><span class="text-muted">[{{ e.source }}]</span> {{ e.summary }}</span>
+                </li>
+                {% empty %}<li class="text-muted">无时间线事件。</li>{% endfor %}
+            </ul>
+        </div>
+    </div>
+
+    <!-- 采集明细（折叠） -->
+    <div class="card mt-3">
+        <div class="vmp-card-head">
+            <h2>采集明细</h2>
+            <span class="vmp-hint">截断与缺失一律显式声明</span>
+        </div>
+        <div class="card-body small">
+            <details>
+                <summary class="text-muted">应用服务器（{{ analysis.servers|length }}）</summary>
+                <table class="table table-sm mt-2 vmp-table">
+                    <thead><tr><th>IP</th><th>OS</th><th>可达</th><th>端口监听</th><th>supervisor</th><th>应用日志(最近写入)</th><th>uptime(s)</th><th>CPU%</th><th>内存%</th></tr></thead>
+                    <tbody>
+                    {% for s in analysis.servers %}
+                    <tr>
+                        <td>{{ s.ip }}</td><td>{{ s.os_type }}</td>
+                        <td>{% if s.reachable %}<span class="vmp-tag vmp-tag-ok">是</span>{% else %}<span class="vmp-tag vmp-tag-bad">否</span>{% endif %}</td>
+                        <td>{% if s.port_listening %}<span class="text-success">监听中</span>{% elif s.listen_ports %}<span class="text-danger">未监听</span>{% elif analysis.service.port %}<span class="text-secondary" title="本次未采集到监听端口列表，无法判定，非'未监听'">未知</span>{% else %}-{% endif %}</td>
+                        <td>{{ s.supervisor_status|default:"-" }}</td>
+                        <td>{% if s.app_log.exists %}<span title="{{ s.app_log.path }}">{{ s.app_log.mtime|default:"?" }} <span class="text-muted">({{ s.app_log.mtime_ago_sec }}s前)</span></span>{% elif s.app_log.path %}<span class="text-danger" title="{{ s.app_log.error }}">文件不存在</span>{% else %}<span class="text-secondary" title="未登记应用/supervisor 日志路径">-</span>{% endif %}</td>
+                        <td>{{ s.uptime_seconds|default:"-" }}</td>
+                        <td>{{ s.cpu_percent|default:"-" }}</td>
+                        <td>{{ s.mem_percent|default:"-" }}</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </details>
+            <details class="mt-2">
+                <summary class="text-muted">近 {{ analysis.servers.0.os_logs.days|default:1 }} 日操作系统事件（重启/OOM/崩溃/服务失败/补丁/人为操作，只读采集）</summary>
+                <div class="mt-2">
+                    {% for s in analysis.servers %}
+                    <div class="mb-3">
+                        <div class="fw-semibold">{{ s.ip }} <span class="text-muted fw-normal">({{ s.os_type }})</span></div>
+                        {% if s.os_logs.available %}
+                        <div class="mb-1 d-flex flex-wrap gap-1 align-items-center">
+                            {% for c in s.os_logs.count_labels %}
+                            <span class="vmp-tag {% if c.kind == 'log_cleared' or c.kind == 'oom' or c.kind == 'crash' %}vmp-tag-bad{% elif c.kind == 'reboot' or c.kind == 'kernel' or c.kind == 'service' or c.kind == 'syslog_err' %}vmp-tag-warn{% else %}vmp-tag-mute{% endif %}">{{ c.label }} {{ c.count }}</span>
+                            {% endfor %}
+                            <span class="text-muted">匹配 {{ s.os_logs.total_matched }} 条{% if s.os_logs.truncated %}，已截断返回 {{ s.os_logs.returned }} 条{% endif %}</span>
+                        </div>
+                        {% if s.os_logs.level_filter %}
+                        <div class="text-muted small mb-1">采集范围：{{ s.os_logs.level_filter }}；范围外的事件未采集，未出现不代表未发生。</div>
+                        {% endif %}
+                        <div class="text-muted small mb-1">下表为与本服务最相关的前若干条逐条明细；该机近一日<strong>全部</strong>警告/错误见后面的「按错误类型聚合」。</div>
+                        <table class="table table-sm mb-1 vmp-table">
+                            <thead><tr><th style="width:150px">时间</th><th style="width:110px">分类</th><th style="width:80px">级别</th><th>内容</th><th style="width:190px">与本服务相关依据</th></tr></thead>
+                            <tbody>
+                            {% for e in s.os_events %}
+                            <tr>
+                                <td class="text-nowrap">{{ e.ts_text|default:"时间不详" }}</td>
+                                <td><span class="vmp-tag {% if e.kind == 'log_cleared' or e.kind == 'oom' or e.kind == 'crash' %}vmp-tag-bad{% elif e.level == 'Error' or e.level == 'Critical' or e.level == 'Warning' %}vmp-tag-warn{% else %}vmp-tag-mute{% endif %}">{{ e.kind_label }}</span></td>
+                                <td>{{ e.level|default:"-" }}</td>
+                                <td class="text-break">{{ e.message }}{% if e.source %} <span class="text-muted">({{ e.source }}{% if e.log %} · {{ e.log }}{% endif %})</span>{% endif %}</td>
+                                <td class="text-muted">{{ e.matched }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="5" class="text-muted">未采到与本服务相关或整机级异常的 OS 事件</td></tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                        {% if s.os_events_dropped %}
+                        <div class="text-muted">另有 {{ s.os_events_dropped }} 条相关事件未逐条展开（已按重要度取前若干条；全部种类见下方聚合表）。</div>
+                        {% endif %}
+                        {% if s.os_logs.groups %}
+                        <details class="mt-1">
+                            <summary class="text-muted small">
+                                按错误类型聚合（{{ s.os_logs.groups|length }} 类{% if s.os_logs.groups_dropped %}，<span class="text-danger">另有 {{ s.os_logs.groups_dropped }} 类未列出</span>{% endif %}）
+                                — 覆盖该机近一日全部警告/错误，次数为窗口内该类错误的总次数
+                            </summary>
+                            <div class="table-responsive mt-2">
+                                <table class="table table-sm small mb-1 vmp-table">
+                                    <thead>
+                                    <tr>
+                                        <th style="width:80px">级别</th>
+                                        <th style="width:110px">分类</th>
+                                        <th style="width:170px">来源</th>
+                                        <th style="width:70px">事件ID</th>
+                                        <th style="width:60px">次数</th>
+                                        <th style="width:280px">首次 ~ 最近</th>
+                                        <th>原文（该类首条）</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    {% for g in s.os_logs.groups %}
+                                    <tr>
+                                        <td><span class="vmp-tag {% if g.level == 'Critical' or g.level == 'Error' %}vmp-tag-bad{% elif g.level == 'Warning' %}vmp-tag-warn{% else %}vmp-tag-mute{% endif %}">{{ g.level|default:"-" }}</span></td>
+                                        <td>{{ g.kind_label|default:g.kind }}</td>
+                                        <td class="text-muted text-break">{{ g.source|default:"-" }}{% if g.log %}<br><span class="small">{{ g.log }}</span>{% endif %}</td>
+                                        <td>{{ g.id|default:"-" }}</td>
+                                        <td class="fw-bold {% if g.count > 50 %}text-danger{% endif %}">{{ g.count }}</td>
+                                        <td class="text-nowrap text-muted">{{ g.first_text }}<br>~ {{ g.last_text }}</td>
+                                        <td class="text-break">{{ g.sample|default:g.signature }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </details>
+                        {% endif %}
+                        {% if s.os_logs.errors %}
+                        <div class="text-warning">部分日志源未能读取（存在盲区，非"无异常"）：{{ s.os_logs.errors|join:"；" }}</div>
+                        {% endif %}
+                        {% else %}
+                        {% if s.os_logs.level_filter and not s.os_logs.errors %}
+                        <div class="text-muted">近 {{ s.os_logs.days|default:1 }} 日没有级别在「{{ s.os_logs.level_filter }}」范围内的操作系统事件——这是"没有符合条件的事件"，不是"没读到日志"；范围外（如 Information 级）的事件按策略不采集，<strong>仍不代表该机无异常</strong>。</div>
+                        {% else %}
+                        <div class="text-warning">未采集到操作系统事件日志——<strong>不代表该机无异常</strong>，通常是采集账号权限不足或日志源不可用{% if s.os_logs.errors %}：{{ s.os_logs.errors|join:"；" }}{% endif %}</div>
+                        {% endif %}
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </details>
+            {% if analysis.nginx_logs %}
+            <details class="mt-2">
+                <summary class="text-muted">Nginx 日志窗口统计</summary>
+                <div class="mt-2">
+                    {% for a in analysis.nginx_logs.access_logs %}
+                    <div>access: {{ a.path }}{% if a.path_resolved %} <span class="text-muted">(登记路径 {{ a.configured_path }} 含 nginx 变量，已解析)</span>{% endif %} — 窗口内 {{ a.total_in_window }} 条（正常 {{ a.ok_in_window|default:0 }} 条），状态码 {{ a.status_counts }}；<strong>最近正常访问(2xx/3xx)：{% if a.last_ok_ts %}{{ a.last_ok_ts }}{% elif a.lines_scanned and not a.lines_matched %}<span class="text-warning">尾部有 {{ a.lines_scanned }} 行，但时间戳格式未识别（并非"无访问"）</span>{% else %}尾部未见{% endif %}</strong>{% if a.last_any_ts %}（最近任意请求 {{ a.last_any_ts }}）{% endif %}{% if a.lines_scanned and not a.lines_matched and a.sample_tail %} <span class="text-muted">样本行：{{ a.sample_tail }}</span>{% endif %} {% if a.error %}<span class="text-danger">({{ a.error }})</span>{% endif %}</div>
+                    {% endfor %}
+                    {% for e in analysis.nginx_logs.error_logs %}
+                    <div>error: {{ e.path }}{% if e.path_resolved %} <span class="text-muted">(登记路径 {{ e.configured_path }} 含 nginx 变量，已解析)</span>{% endif %} — {% if e.service_scoped %}本服务归属 <strong>{{ e.total_in_window|default:0 }}</strong> 行（过滤标识 {{ e.match_tokens|join:"、" }}；全局同窗口共 {{ e.total_all_services|default:0 }} 行）{% if e.signatures %}，签名 {{ e.signatures }}{% else %}，<span class="text-success">窗口内无属于本服务的 upstream 错误</span>{% endif %}{% else %}窗口内命中 {{ e.total_in_window|default:0 }} 行（<span class="text-warning">未按服务过滤，可能混入其它服务报错</span>），签名 {{ e.signatures }}{% endif %}{% if e.first_ts %}，时间跨度 {{ e.first_ts }} ~ {{ e.last_ts }}{% endif %} <span class="text-muted">（历史事件；实时 tail -f 只显示此后新增）</span>{% if e.error %}<span class="text-danger">({{ e.error }})</span>{% endif %}</div>
+                    {% endfor %}
+                </div>
+            </details>
+            {% endif %}
+            {% if analysis.dns %}
+            <details class="mt-2">
+                <summary class="text-muted">DNS 解析</summary>
+                <div class="mt-2">
+                    {% for d in analysis.dns %}
+                    <div>{{ d.domain }}：{% for s in d.servers %}[{{ s.server }}→{{ s.addresses|join:","|default:s.error }}] {% endfor %}ping {{ d.ping.ip|default:"不通" }}</div>
+                    {% endfor %}
+                </div>
+            </details>
+            {% endif %}
+            {% if analysis.jenkins %}
+            <details class="mt-2">
+                <summary class="text-muted">Jenkins 最近构建（{{ analysis.jenkins.job }}）</summary>
+                <ul class="mt-2 mb-0">
+                    {% for b in analysis.jenkins.builds %}
+                    <li>#{{ b.number }} {{ b.result|default:"?" }} @ {{ b.iso_time|default:"?" }}{% if b.commits %} — 提交：{{ b.commits|join:"; " }}{% endif %}</li>
+                    {% empty %}<li class="text-muted">无构建记录{% if analysis.jenkins.error %}（{{ analysis.jenkins.error }}）{% endif %}</li>{% endfor %}
+                </ul>
+            </details>
+            {% endif %}
+            {% if analysis.errors %}
+            <div class="alert alert-warning small mt-2 mb-0">
+                <div class="fw-semibold">采集过程中的告警（部分信号可能缺失）：</div>
+                <ul class="mb-0">{% for er in analysis.errors %}<li>{{ er }}</li>{% endfor %}</ul>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% include "opsanalysis/_llm_panel.html" %}
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if task.status == 'pending' or task.status == 'running' %}
+<script>
+(function () {
+    var url = "{% url 'ops_api_troubleshoot_result' task.id %}";
+    var timer = setInterval(function () {
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { if (d.finished) { clearInterval(timer); window.location.reload(); } })
+            .catch(function () {});
+    }, 3000);
+})();
+</script>
+{% endif %}
+{% endblock %}

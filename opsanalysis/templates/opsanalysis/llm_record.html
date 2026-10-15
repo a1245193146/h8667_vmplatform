@@ -1,0 +1,123 @@
+{% extends "resize/base.html" %}
+{% load static %}
+
+{% block title %}大模型分析留痕 #{{ rec.id }} - 信息系统运维平台{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+    <div class="vmp-page-head">
+        <div>
+            <h1>大模型辅助分析留痕 #{{ rec.id }} <span class="vmp-tag vmp-tag-warn">非结论，需人工核实</span></h1>
+            <p class="vmp-sub">
+                {{ task.get_kind_display }} · 任务 #{{ task.id }} · {{ task.target|default:"-" }}
+            </p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{% url 'ops_tasks' %}" class="btn btn-sm btn-outline-secondary">分析任务</a>
+            <a href="{{ back_url }}" class="btn btn-sm btn-primary">返回结果页</a>
+        </div>
+    </div>
+
+    <div class="alert alert-light border small">
+        本页保存的是<strong>当时送给模型的证据副本</strong>与<strong>模型的原始输出</strong>，
+        用于事后复核"模型看到了什么、据此说了什么"，也可作为同类故障的历史参考。
+        模型输出只是推测/建议，<strong>不得当成结论</strong>；上方结果页里的采集数据才是事实来源。
+    </div>
+
+    <div class="card mb-3">
+        <div class="vmp-card-head">
+            <h2>调用信息</h2>
+            <span class="vmp-hint">口径可复现：模型、接口、温度、提示词版本都留档</span>
+        </div>
+        <div class="card-body">
+            <table class="table table-sm small mb-0 vmp-table">
+                <tbody>
+                <tr><th style="width:180px">状态</th><td>{{ rec.get_status_display }}（{{ rec.status }}）</td></tr>
+                <tr><th>场景</th><td>{{ rec.get_scope_display }}</td></tr>
+                <tr><th>目标任务</th><td>#{{ rec.task_id }} · {{ task.target|default:"-" }}</td></tr>
+                <tr><th>模型 / 接口</th><td>{{ rec.model|default:"-" }} · {{ rec.base_url|default:"-" }}</td></tr>
+                <tr><th>temperature</th><td>{{ rec.temperature|default:"-" }}</td></tr>
+                <tr><th>提示词版本</th><td>{{ rec.prompt_version|default:"-" }}</td></tr>
+                <tr><th>批次数</th><td>{{ rec.batch_count }}</td></tr>
+                <tr><th>证据字数 / 提示词字数</th><td>{{ rec.evidence_chars }} / {{ rec.prompt_chars }}</td></tr>
+                <tr><th>输出字数 / 总耗时</th><td>{{ rec.output_chars }} / {{ rec.latency_ms }} ms</td></tr>
+                <tr><th>发起人</th><td>{{ rec.requested_by|default:"-" }}</td></tr>
+                <tr><th>发起 / 完成时间</th>
+                    <td>{{ rec.requested_at|date:"Y-m-d H:i:s"|default:"-" }} /
+                        {{ rec.finished_at|date:"Y-m-d H:i:s"|default:"-" }}</td></tr>
+                {% if rec.error %}
+                <tr><th>错误 / 警告</th><td class="text-warning">{{ rec.error }}</td></tr>
+                {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="vmp-card-head">
+            <h2>模型最终意见（{{ rec.output_chars }} 字）</h2>
+            <span class="vmp-hint">推测/建议，不写入已确认事实</span>
+        </div>
+        <div class="card-body">
+            {% if rec.output %}
+            <div class="border rounded bg-light p-2 small"
+                 style="white-space:pre-wrap;word-break:break-word;max-height:600px;overflow:auto;">{{ rec.output }}</div>
+            {% else %}
+            <div class="small text-muted mb-0">本次没有产出意见（状态：{{ rec.get_status_display }}）。</div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if rec.batches %}
+    <div class="card mb-3">
+        <div class="vmp-card-head">
+            <h2>分批明细（{{ rec.batches|length }} 条，含每批原始输出）</h2>
+            <span class="vmp-hint">超容量时分批作答再汇总</span>
+        </div>
+        <div class="card-body">
+            {% for b in rec.batches %}
+            <div class="border rounded p-2 mb-2 small">
+                <div class="fw-bold">
+                    第 {{ b.index }} 批 · {{ b.status }}
+                    <span class="text-muted fw-normal">
+                        证据 {{ b.chars|default:0 }} 字 · 提示 {{ b.prompt_chars|default:0 }} 字 ·
+                        耗时 {{ b.latency_ms|default:0 }} ms · {{ b.model|default:"" }}
+                    </span>
+                </div>
+                <div class="text-muted">覆盖段落：{{ b.section_titles|join:"、"|default:"-" }}</div>
+                {% if b.warning %}<div class="text-warning">{{ b.warning }}</div>{% endif %}
+                {% if b.error %}<div class="text-danger">{{ b.error }}</div>{% endif %}
+                {% if b.text %}
+                <details class="mt-1">
+                    <summary class="text-muted">该批原始输出</summary>
+                    <div class="border rounded bg-light p-2 mt-1"
+                         style="white-space:pre-wrap;word-break:break-word;max-height:400px;overflow:auto;">{{ b.text }}</div>
+                </details>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="vmp-card-head">
+            <h2>当时送给模型的证据全文（{{ rec.evidence_chars }} 字，已脱敏）</h2>
+            <span class="vmp-hint">副本，改动不影响任何采集数据</span>
+        </div>
+        <div class="card-body">
+            {% if rec.evidence %}
+            <div class="small text-muted mb-2">
+                证据由系统按"段落重要度"装填，超出单批容量的部分进入下一批；始终未能送出的段落会在下方标注。
+                这里是<strong>副本</strong>，修改它不会影响任何采集数据。
+            </div>
+            <pre class="border rounded bg-light p-2 small mb-0"
+                 style="white-space:pre-wrap;word-break:break-word;max-height:640px;overflow:auto;">{{ rec.evidence }}</pre>
+            {% else %}
+            <div class="small text-muted mb-0">本次没有留下证据副本。</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

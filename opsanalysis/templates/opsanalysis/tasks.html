@@ -1,0 +1,79 @@
+{% extends "resize/base.html" %}
+{% load static %}
+
+{% block title %}分析任务 - 信息系统运维平台{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+    <div class="vmp-page-head">
+        <div>
+            <h1>分析任务</h1>
+            <p class="vmp-sub">影响分析与故障排查的历史记录。全程只读采集，不含任何变更动作。</p>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <span class="text-muted small">最多显示最近 200 条</span>
+        </div>
+    </div>
+
+    <div class="vmp-filterbar">
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{% url 'ops_tasks' %}"
+               class="btn btn-sm {% if not kind %}btn-primary{% else %}btn-outline-secondary{% endif %}">全部</a>
+            <a href="?kind=impact"
+               class="btn btn-sm {% if kind == 'impact' %}btn-primary{% else %}btn-outline-secondary{% endif %}">影响分析</a>
+            <a href="?kind=troubleshoot"
+               class="btn btn-sm {% if kind == 'troubleshoot' %}btn-primary{% else %}btn-outline-secondary{% endif %}">服务排查</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 vmp-table">
+                <thead>
+                <tr>
+                    <th style="width:64px;">#</th>
+                    <th style="width:110px;">类型</th>
+                    <th>目标</th>
+                    <th style="width:88px;">状态</th>
+                    <th style="width:130px;">发起人</th>
+                    <th style="width:160px;">创建时间</th>
+                    <th style="width:80px;"></th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for t in tasks %}
+                <tr>
+                    <td class="small text-muted">{{ t.id }}</td>
+                    <td><span class="vmp-tag vmp-tag-info">{{ t.get_kind_display }}</span></td>
+                    <td class="small">{{ t.target|default:"-" }}</td>
+                    <td>
+                        {% if t.status == 'success' %}<span class="vmp-tag vmp-tag-ok">成功</span>
+                        {% elif t.status == 'failed' %}<span class="vmp-tag vmp-tag-bad">失败</span>
+                        {% elif t.status == 'running' %}<span class="vmp-tag vmp-tag-info">执行中</span>
+                        {% else %}<span class="vmp-tag vmp-tag-mute">待执行</span>{% endif %}
+                    </td>
+                    <td class="small">{{ t.initiated_by|default:"system" }}</td>
+                    <td class="small text-nowrap text-muted">{{ t.created_at|date:"Y-m-d H:i:s" }}</td>
+                    <td>
+                        {% if t.kind == 'impact' %}
+                        <a class="btn btn-sm btn-outline-secondary" href="{% url 'ops_impact_result' t.id %}">查看</a>
+                        {% elif t.kind == 'troubleshoot' %}
+                        <a class="btn btn-sm btn-outline-secondary" href="{% url 'ops_troubleshoot_result' t.id %}">查看</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        {% include "resize/partials/_empty.html" with text="暂无分析任务" hint="到「运维分析」首页发起一次影响分析或故障排查后，记录会出现在这里。" %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

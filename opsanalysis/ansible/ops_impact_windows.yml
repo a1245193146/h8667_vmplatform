@@ -1,0 +1,53 @@
+---
+# ops_impact_windows.yml — Windows 服务器操作影响分析（只读采集）
+# 对应脚本: opsanalysis/powershell/Collect-OpsImpact.ps1
+# 用法: ansible-playbook opsanalysis/ansible/ops_impact_windows.yml -e target_host=x.x.x.x
+# 输出: ps1 的单行 JSON 原样打印到 stdout
+# 红线: 全程只读，绝不执行关机/重启/停服务等危险操作
+# 作者: AUTO-GENERATED (opsanalysis module)
+
+- name: Collect Windows server impact snapshot
+  hosts: "{{ target_host }}"
+  gather_facts: false
+  vars:
+    # PowerShell 脚本目录：默认 <playbook目录>/../powershell，可用 -e ps_dir= 覆盖。
+    ps_dir_resolved: "{{ ps_dir | default(playbook_dir ~ '/../powershell', true) }}"
+  tasks:
+    - name: Check Collect-OpsImpact.ps1 exists on Ansible controller
+      stat:
+        path: "{{ ps_dir_resolved }}/Collect-OpsImpact.ps1"
+      delegate_to: localhost
+      become: false
+      register: ps_stat_ops_impact
+
+    - name: Fail clearly when Collect-OpsImpact.ps1 missing
+      fail:
+        msg: "Ansible 控制器上找不到脚本 {{ ps_dir_resolved }}/Collect-OpsImpact.ps1 ，请把仓库 opsanalysis/powershell/ 目录放到该位置，或用 -e ps_dir= 指定脚本目录"
+      when: not ps_stat_ops_impact.stat.exists
+
+    - name: Ensure AUTO-ITOPS temp dir exists on target
+      win_file:
+        path: C:\Windows\Temp\AUTO-ITOPS
+        state: directory
+
+    - name: Copy Collect-OpsImpact.ps1 to target
+      win_copy:
+        src: "{{ ps_dir_resolved }}/Collect-OpsImpact.ps1"
+        dest: C:\Windows\Temp\AUTO-ITOPS\Collect-OpsImpact.ps1
+
+    - name: Run Collect-OpsImpact.ps1
+      # AppLogPath 为空时必须【整段省略】该参数：win_shell 走 cmd.exe，
+      # `-AppLogPath ''` 会被 PowerShell -File 当成"空实参"而报
+      # "Missing an argument for parameter 'AppLogPath'"，导致整次采集 rc=1 失败。
+      # 非空时用【双引号】包裹（cmd.exe 只认双引号做分组，单引号是字面量；
+      # 双引号才能让含空格的 Windows 路径如 C:\Program Files\... 作为单个实参传入）。
+      win_shell: >-
+        powershell -NoProfile -ExecutionPolicy Bypass
+        -File C:\Windows\Temp\AUTO-ITOPS\Collect-OpsImpact.ps1
+        -OsLogDays {{ os_log_days | default(1, true) }}
+        {{ '-AppLogPath "' ~ app_log_path ~ '"' if (app_log_path | default('', true)) else '' }}
+      register: result
+
+    - name: Print JSON result
+      debug:
+        var: result.stdout

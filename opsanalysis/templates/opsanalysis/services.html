@@ -1,0 +1,233 @@
+{% extends "resize/base.html" %}
+{% load static %}
+
+{% block title %}服务关联登记 - 信息系统运维平台{% endblock %}
+
+{% block content %}
+<div class="py-4 vmp-fade-in">
+
+    <div class="vmp-page-head">
+        <div>
+            <h1>服务关联登记</h1>
+            <p class="vmp-sub">
+                把「IP / 端口 / 进程」对应到「哪个业务服务」。影响分析与故障排查都依赖这张表。
+            </p>
+        </div>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <span class="vmp-tag vmp-tag-warn">待确认 {{ candidate_count }}</span>
+            <span class="vmp-tag vmp-tag-ok">已确认 {{ confirmed_count }}</span>
+            <form method="post" action="{% url 'ops_discover_run' %}"
+                  onsubmit="return confirm('将只读扫描 Nginx/Jenkins/Supervisor 生成关联候选，确认运行？');">
+                {% csrf_token %}
+                <button class="btn btn-sm btn-primary" type="submit">运行自动发现</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="vmp-filterbar">
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <a href="{% url 'ops_services' %}" class="btn btn-sm {% if not status %}btn-primary{% else %}btn-outline-secondary{% endif %}">全部</a>
+            <a href="?status=candidate" class="btn btn-sm {% if status == 'candidate' %}btn-primary{% else %}btn-outline-secondary{% endif %}">待确认</a>
+            <a href="?status=confirmed" class="btn btn-sm {% if status == 'confirmed' %}btn-primary{% else %}btn-outline-secondary{% endif %}">已确认</a>
+            <form class="d-flex ms-auto" method="get" action="{% url 'ops_services' %}">
+                {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+                <input class="form-control form-control-sm me-1" type="search" name="q" value="{{ q }}" placeholder="搜索 名称/域名/IP/job" style="min-width:220px;">
+                <button class="btn btn-sm btn-outline-secondary" type="submit">搜索</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="alert alert-secondary small py-2 mb-3">
+        自动发现全程<strong>只读</strong>：不 reload nginx、不触发构建、不重启任何程序。
+        候选需人工点"确认"，确认过的记录不会被后续发现覆盖。
+    </div>
+
+    <div class="card">
+        <div class="vmp-card-head">
+            <span class="vmp-hint">拖表头右缘竖条调列宽，双击复位（本机记忆）</span>
+            <button class="btn btn-sm btn-outline-secondary" type="button" id="opsResetColWidth">重置列宽</button>
+        </div>
+        <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle small ops-resizable vmp-table" id="opsServicesTable"
+               style="table-layout:fixed; width:100%; min-width:1420px;">
+            <colgroup>
+                <col data-key="name" style="width:180px">
+                <col data-key="integ" style="width:300px">
+                <col data-key="alias" style="width:120px">
+                <col data-key="domain" style="width:140px">
+                <col data-key="ip" style="width:130px">
+                <col data-key="port" style="width:70px">
+                <col data-key="os" style="width:80px">
+                <col data-key="status" style="width:80px">
+                <col data-key="source" style="width:90px">
+                <col data-key="online" style="width:110px">
+                <col data-key="op" style="width:130px">
+            </colgroup>
+            <thead class="table-light">
+                <tr>
+                    <th class="text-nowrap">统一名</th>
+                    <th class="text-nowrap">集成来源
+                        <span class="text-muted fw-normal" title="按 Nginx/Supervisor/Jenkins/Git 命中数量降序排列，越全越靠前">（{{ services|length }} 条按集成度排序）</span>
+                    </th>
+                    <th>别名</th><th>域名</th><th class="text-nowrap">服务器IP</th>
+                    <th class="text-nowrap">端口</th><th class="text-nowrap">OS</th>
+                    <th class="text-nowrap">状态</th><th class="text-nowrap">来源</th>
+                    <th class="text-nowrap" title="最近一次自动发现确认其部署服务器在线的时间；长期未刷新说明可能已停用">最近在线</th>
+                    <th class="text-end text-nowrap">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for s in services %}
+                <tr>
+                    <td class="text-nowrap ops-cell-trunc" title="{{ s.canonical_name }}"><a href="{% url 'ops_service_detail' s.pk %}" class="fw-semibold">{{ s.canonical_name }}</a></td>
+                    <td>
+                        <div class="d-flex flex-wrap gap-1">
+                            {% if s.domains or s.nginx_access_log or s.nginx_error_log %}
+                            <span class="vmp-tag vmp-tag-info text-truncate ops-badge" title="Nginx：{{ s.domains|join:', ' }}{% if s.nginx_access_log %} | access_log {{ s.nginx_access_log }}{% endif %}">Nginx</span>{% endif %}
+                            {% if s.supervisor_program %}
+                            {% if s.supervisor_log_url %}
+                            <a class="vmp-tag vmp-tag-accent text-truncate text-decoration-none ops-badge" href="{{ s.supervisor_log_url }}" target="_blank" rel="noopener" title="Supervisor 程序：{{ s.supervisor_program }}（{{ s.server_ips|first }}:9999 logtail{% if s.server_ips|length > 1 %}，另 {{ s.server_ips|length|add:"-1" }} 台见详情页{% endif %}）">{{ s.supervisor_program }}</a>
+                            {% else %}
+                            <span class="vmp-tag vmp-tag-accent text-truncate ops-badge" title="Supervisor 程序：{{ s.supervisor_program }}（未登记部署IP，无法拼 logtail 地址）">{{ s.supervisor_program }}</span>
+                            {% endif %}{% endif %}
+                            {% if s.jenkins_job %}
+                            <span class="vmp-tag vmp-tag-warn text-truncate ops-badge" title="Jenkins job：{{ s.jenkins_job }}">{{ s.jenkins_job }}</span>{% endif %}
+                            {% if s.git_project %}
+                            <span class="vmp-tag vmp-tag-ok text-truncate ops-badge" title="Git：{{ s.git_project }}">{{ s.git_project }}</span>{% endif %}
+                            {% if not s.integration_sources %}<span class="text-muted">-</span>{% endif %}
+                        </div>
+                    </td>
+                    <td class="text-muted ops-cell-trunc" title="{{ s.aliases|join:', ' }}">{{ s.aliases|join:", "|default:"-" }}</td>
+                    <td class="text-muted ops-cell-trunc" title="{{ s.domains|join:', ' }}">{{ s.domains|join:", "|default:"-" }}</td>
+                    <td class="text-muted ops-cell-trunc" title="{{ s.server_ips|join:', ' }}">{{ s.server_ips|join:", "|default:"-" }}</td>
+                    <td class="text-nowrap ops-cell-trunc">{{ s.port|default:"-" }}</td>
+                    <td class="text-nowrap ops-cell-trunc">{{ s.get_os_type_display }}</td>
+                    <td class="text-nowrap">
+                        {% if s.status == 'confirmed' %}<span class="vmp-tag vmp-tag-ok">已确认</span>
+                        {% else %}<span class="vmp-tag vmp-tag-warn">待确认</span>{% endif %}
+                    </td>
+                    <td class="text-nowrap ops-cell-trunc">{{ s.get_source_display }}</td>
+                    <td class="text-nowrap" title="{% if s.last_online_at %}最近在线：{{ s.last_online_at|date:"Y-m-d H:i" }}{% else %}尚未探测到在线（运行一次自动发现后更新）{% endif %}">
+                        {% if s.online_recent %}<span class="vmp-tag vmp-tag-ok">{{ s.online_ago_text }}</span>
+                        {% elif s.last_online_at %}<span class="vmp-tag vmp-tag-mute">{{ s.online_ago_text }}</span>
+                        {% else %}<span class="text-muted">未知</span>{% endif %}
+                    </td>
+                    <td class="text-end text-nowrap">
+                        <a class="btn btn-sm btn-outline-secondary" href="{% url 'ops_service_detail' s.pk %}">详情</a>
+                        {% if s.status == 'candidate' %}
+                        <form method="post" action="{% url 'ops_service_confirm' s.pk %}" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                            <button class="btn btn-sm btn-outline-success" type="submit">确认</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="11">
+                    {% include "resize/partials/_empty.html" with text="暂无服务关联记录" hint="点右上「运行自动发现」只读扫描 Nginx/Jenkins/Supervisor 生成候选，或到详情页人工登记。" %}
+                </td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+
+    {% include "resize/partials/_pagination.html" with page=page_obj %}
+</div>
+
+<style>
+    /* 紧凑单元格：单行截断，行高统一，避免字段多导致行被撑高 */
+    .ops-resizable td.ops-cell-trunc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .ops-resizable th{position:relative;}
+    .ops-badge{max-width:100%;font-size:.72rem;padding:.25em .5em;}
+    /* 表头右边缘拖拽手柄：常显一条竖线，鼠标悬停/拖动时高亮加粗，看得见才好拖。
+       配色一律走主题令牌——这里原来写死了 Bootstrap 的 #0d6efd/rgba(13,110,253)，
+       那个冷蓝压在暖纸色背景上像外来物，而且改主题色时它不会跟着变。
+       静止态用中性边框色，靠中间那颗蓝药丸提示"这里能拖"，悬停才整体上蓝。 */
+    .ops-resizable th .ops-col-resizer{
+        position:absolute;top:0;right:0;width:8px;height:100%;
+        cursor:col-resize;user-select:none;
+        border-right:2px solid var(--vmp-border);
+    }
+    .ops-resizable th .ops-col-resizer::after{
+        content:"";position:absolute;top:50%;right:1px;transform:translateY(-50%);
+        width:3px;height:14px;border-radius:2px;
+        background:var(--vmp-info);opacity:.45;
+    }
+    .ops-resizable th .ops-col-resizer:hover,
+    .ops-resizable th .ops-col-resizer.ops-resizing{
+        border-right-color:var(--vmp-info);background:var(--vmp-info-soft);
+    }
+    .ops-resizable th .ops-col-resizer:hover::after,
+    .ops-resizable th .ops-col-resizer.ops-resizing::after{
+        background:var(--vmp-info);opacity:1;height:20px;
+    }
+</style>
+
+<script>
+(function () {
+    var table = document.getElementById('opsServicesTable');
+    if (!table) return;
+    var STORE_KEY = 'opsServicesColWidths';
+    var cols = Array.prototype.slice.call(table.querySelectorAll('colgroup col'));
+    var ths = Array.prototype.slice.call(table.querySelectorAll('thead th'));
+
+    function saveWidths() {
+        var map = {};
+        cols.forEach(function (c) { map[c.dataset.key] = c.style.width; });
+        try { localStorage.setItem(STORE_KEY, JSON.stringify(map)); } catch (e) {}
+    }
+    function loadWidths() {
+        var raw = null;
+        try { raw = localStorage.getItem(STORE_KEY); } catch (e) {}
+        if (!raw) return;
+        var map;
+        try { map = JSON.parse(raw); } catch (e) { return; }
+        cols.forEach(function (c) { if (map[c.dataset.key]) c.style.width = map[c.dataset.key]; });
+    }
+    function resetWidths() {
+        try { localStorage.removeItem(STORE_KEY); } catch (e) {}
+        location.reload();
+    }
+
+    loadWidths();
+
+    ths.forEach(function (th, idx) {
+        var grip = document.createElement('div');
+        grip.className = 'ops-col-resizer';
+        th.appendChild(grip);
+
+        var startX = 0, startW = 0, col = cols[idx];
+        function onMove(e) {
+            if (!col) return;
+            var dx = (e.clientX - startX);
+            var w = Math.max(50, startW + dx);
+            col.style.width = w + 'px';
+        }
+        function onUp() {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            grip.classList.remove('ops-resizing');
+            saveWidths();
+        }
+        grip.addEventListener('mousedown', function (e) {
+            if (!col) return;
+            e.preventDefault();
+            startX = e.clientX;
+            startW = col.getBoundingClientRect().width;
+            grip.classList.add('ops-resizing');
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+        grip.addEventListener('dblclick', function () {
+            if (col) { col.style.width = ''; }
+            saveWidths();
+        });
+    });
+
+    var resetBtn = document.getElementById('opsResetColWidth');
+    if (resetBtn) resetBtn.addEventListener('click', resetWidths);
+})();
+</script>
+{% endblock %}

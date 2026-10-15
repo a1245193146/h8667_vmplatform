@@ -1,0 +1,55 @@
+---
+# ops_discover_supervisor.yml — Linux Supervisor 程序只读发现（服务关联发现）
+# 对应脚本: opsanalysis/scripts/discover_supervisor.py
+# 用法: ansible-playbook opsanalysis/ansible/ops_discover_supervisor.yml -e target_host=<app_ip>
+# 红线: 只读，绝不 start/stop/restart 任何 program
+# 说明: Windows 应用机的 supervisor 发现复用 ops_impact_windows.yml 采集到的 supervisor 段，不走本 playbook。
+- name: Discover supervisor programs (Linux)
+  hosts: "{{ target_host }}"
+  gather_facts: false
+  vars:
+    script_dir_resolved: "{{ script_dir | default(playbook_dir ~ '/../scripts', true) }}"
+    remote_script: /tmp/AUTO-ITOPS/discover_supervisor.py
+  tasks:
+    - name: Check discover_supervisor.py exists on controller
+      stat:
+        path: "{{ script_dir_resolved }}/discover_supervisor.py"
+      delegate_to: localhost
+      become: false
+      register: st_sup
+
+    - name: Fail clearly when discover_supervisor.py missing
+      fail:
+        msg: "控制器上找不到 {{ script_dir_resolved }}/discover_supervisor.py ，请同步 opsanalysis/scripts/ 目录"
+      when: not st_sup.stat.exists
+
+    - name: Ensure remote temp dir
+      file:
+        path: /tmp/AUTO-ITOPS
+        state: directory
+        mode: '0755'
+
+    - name: Copy discover_supervisor.py
+      copy:
+        src: "{{ script_dir_resolved }}/discover_supervisor.py"
+        dest: "{{ remote_script }}"
+        mode: '0755'
+
+    - name: Run discover_supervisor.py
+      shell: >-
+        PY=$(command -v python3 || command -v python2 || command -v python);
+        "$PY" {{ remote_script }}
+      args:
+        executable: /bin/bash
+      register: result
+      changed_when: false
+
+    - name: Print JSON result
+      debug:
+        var: result.stdout
+
+    - name: Cleanup remote temp script
+      file:
+        path: "{{ remote_script }}"
+        state: absent
+      changed_when: false

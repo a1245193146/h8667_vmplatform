@@ -1,0 +1,55 @@
+---
+# ops_discover_jenkins.yml — Jenkins job config.xml 只读解析（服务关联发现）
+# 对应脚本: opsanalysis/scripts/discover_jenkins.py
+# 用法: ansible-playbook opsanalysis/ansible/ops_discover_jenkins.yml -e target_host=<jenkins_ip> -e jenkins_jobs_dir=/var/lib/jenkins/jobs
+# 红线: 只读，绝不触发构建/改配置
+- name: Discover jenkins jobs
+  hosts: "{{ target_host }}"
+  gather_facts: false
+  vars:
+    script_dir_resolved: "{{ script_dir | default(playbook_dir ~ '/../scripts', true) }}"
+    remote_script: /tmp/AUTO-ITOPS/discover_jenkins.py
+    jobs_dir_resolved: "{{ jenkins_jobs_dir | default('/var/lib/jenkins/jobs', true) }}"
+  tasks:
+    - name: Check discover_jenkins.py exists on controller
+      stat:
+        path: "{{ script_dir_resolved }}/discover_jenkins.py"
+      delegate_to: localhost
+      become: false
+      register: st_jenkins
+
+    - name: Fail clearly when discover_jenkins.py missing
+      fail:
+        msg: "控制器上找不到 {{ script_dir_resolved }}/discover_jenkins.py ，请同步 opsanalysis/scripts/ 目录"
+      when: not st_jenkins.stat.exists
+
+    - name: Ensure remote temp dir
+      file:
+        path: /tmp/AUTO-ITOPS
+        state: directory
+        mode: '0755'
+
+    - name: Copy discover_jenkins.py
+      copy:
+        src: "{{ script_dir_resolved }}/discover_jenkins.py"
+        dest: "{{ remote_script }}"
+        mode: '0755'
+
+    - name: Run discover_jenkins.py
+      shell: >-
+        PY=$(command -v python3 || command -v python2 || command -v python);
+        "$PY" {{ remote_script }} --jobs-dir '{{ jobs_dir_resolved }}'
+      args:
+        executable: /bin/bash
+      register: result
+      changed_when: false
+
+    - name: Print JSON result
+      debug:
+        var: result.stdout
+
+    - name: Cleanup remote temp script
+      file:
+        path: "{{ remote_script }}"
+        state: absent
+      changed_when: false

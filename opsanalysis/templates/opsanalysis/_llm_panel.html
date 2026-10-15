@@ -1,0 +1,192 @@
+{% comment %}
+大模型辅助分析面板——影响分析页与故障排查页共用（{% include %} 引入）。
+
+红线：
+- 模型输出只是"参考意见"，独立成卡片并标注"非结论，需人工核实"，绝不与已确认事实混排；
+- 页面其它部分照旧展示全部真实采集数据，不因模型意见删减任何内容；
+- 证据被截断/省略的段落如实列出，避免把"没给模型看"误当成"没有异常"。
+
+需要的上下文：task、llm（analysis.llm 字典）、llm_records（历史留痕）、llm_enabled、llm_reason、llm_model
+{% endcomment %}
+<div class="card mt-3" id="llm-card">
+    <div class="vmp-card-head">
+        <h2>大模型辅助分析 <span class="vmp-tag vmp-tag-warn">非结论，需人工核实</span></h2>
+        <span class="vmp-hint">{{ llm_model|default:"未配置模型" }}</span>
+    </div>
+    <div class="card-body">
+        {% if not llm_enabled %}
+        <div class="alert alert-secondary small mb-0">
+            未启用大模型辅助分析：{{ llm_reason|default:"请检查 settings.OPS_LLM_CONFIG" }}
+        </div>
+        {% else %}
+        <div class="small text-muted mb-2">
+            把本次采集到的证据（各部署机状态、应用日志末行、近一日操作系统事件、Nginx 窗口统计等）
+            交给内网模型，按固定 7 段结构输出：异常现象 / 关键日志证据 / 可能的故障原因 /
+            原因判断依据 / 建议的排查步骤 / 尚未确认的问题 / 建议补充采集的数据。
+            每条结论都带 <strong>【已确认事实】/【推测】/【待验证】</strong> 标签，
+            "可能的故障原因"一节只允许出现推测——<strong>不得当成确定根因</strong>。
+            模型<strong>只读证据、没有任何执行权限</strong>；其输出不会写入"已确认事实"，
+            也不会替代或隐藏上面任何真实采集数据。凭据类信息在送入模型前已脱敏；
+            证据超过单次容量时分批作答再汇总，始终送不出的段落会在下方如实列出。
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <form method="post" action="{% url 'ops_llm_run' task.id %}" id="llm-run-form" class="d-inline mb-0">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-primary" id="llm-run-btn"
+                        {% if llm.status == 'running' %}disabled{% endif %}>
+                    {% if llm.status == 'running' %}模型分析中…{% elif llm.status == 'success' %}重新请模型分析{% else %}请模型辅助分析{% endif %}
+                </button>
+            </form>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="llm-ping-btn">测试模型连通性</button>
+            <span class="small" id="llm-ping-out"></span>
+        </div>
+
+        {% if llm.status == 'running' %}
+        <div class="mt-3" id="llm-running">
+            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+            <span class="small text-muted ms-1">正在调用内网模型（{{ llm.model|default:llm_model }}）分析证据；
+                证据较多时会分批作答再汇总，通常十几秒至数分钟，页面会自动刷新。</span>
+            <div class="small text-muted mt-1" id="llm-poll-hint"></div>
+        </div>
+        {% elif llm.status == 'failed' %}
+        <div class="alert alert-danger small mt-3 mb-0">
+            <strong>模型分析失败：</strong>{{ llm.error|default:"未知原因" }}
+            <div class="text-muted mt-1">规则分析结果不受影响，上方内容仍为本次真实采集数据。
+                {% if llm.record_id %}<a href="{% url 'ops_llm_record' llm.record_id %}">查看本次调用留痕</a>{% endif %}
+            </div>
+        </div>
+        {% elif llm.status == 'disabled' %}
+        <div class="alert alert-warning small mt-3 mb-0">{{ llm.error|default:"未启用" }}</div>
+        {% elif llm.status == 'success' %}
+        <div class="mt-3">
+            <div class="border rounded bg-light p-2 small" id="llm-text"
+                 style="white-space:pre-wrap;word-break:break-word;max-height:520px;overflow:auto;">{{ llm.text }}</div>
+            <div class="small text-muted mt-2">
+                模型 {{ llm.model|default:"-" }}（temperature {{ llm.temperature|default:"-" }}）·
+                提示词 {{ llm.prompt_version|default:"-" }} ·
+                耗时 {{ llm.latency_ms|default:0 }} ms ·
+                证据 {{ llm.evidence_chars|default:0 }} 字
+                {% if llm.batch_count > 1 %}· 分 {{ llm.batch_count }} 批分析后汇总{% endif %} ·
+                {% if llm.requested_by %}由 {{ llm.requested_by }} 于 {% endif %}{{ llm.requested_at|default:"-" }} 发起
+                {% if llm.finished_at %}，完成于 {{ llm.finished_at }}{% endif %}
+                {% if llm.record_id %}· <a href="{% url 'ops_llm_record' llm.record_id %}">查看证据全文与各批输出</a>{% endif %}
+            </div>
+            {% if llm.error %}
+            <div class="small text-warning mt-1">{{ llm.error }}</div>
+            {% endif %}
+            {% if llm.evidence_dropped %}
+            <div class="small text-warning mt-1">
+                因超出本次分析容量，以下证据段<strong>未提供给模型</strong>（不代表其中没有异常）：
+                {{ llm.evidence_dropped|join:"、" }}
+            </div>
+            {% endif %}
+            {% if llm.batches %}
+            <details class="mt-1">
+                <summary class="small text-muted">分批明细（{{ llm.batches|length }} 批）</summary>
+                <ul class="small text-muted mt-1 mb-0">
+                    {% for b in llm.batches %}
+                    <li>第 {{ b.index }} 批：{{ b.status }}｜证据 {{ b.chars }} 字｜提示 {{ b.prompt_chars }} 字｜耗时 {{ b.latency_ms }} ms
+                        {% if b.warning %}<span class="text-warning">｜{{ b.warning }}</span>{% endif %}
+                        {% if b.error %}<span class="text-danger">｜{{ b.error }}</span>{% endif %}
+                        <div>覆盖段落：{{ b.section_titles|join:"、"|default:"-" }}</div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </details>
+            {% endif %}
+            <details class="mt-1">
+                <summary class="small text-muted">本次提供给模型的证据段（{{ llm.evidence_sections|length }}）</summary>
+                <ul class="small text-muted mt-1 mb-0">
+                    {% for s in llm.evidence_sections %}<li>{{ s }}</li>{% endfor %}
+                </ul>
+            </details>
+        </div>
+        {% else %}
+        <div class="small text-muted mt-3 mb-0">尚未调用过模型。点击上方按钮即可基于本次采集证据生成辅助意见。</div>
+        {% endif %}
+
+        {% if llm_records %}
+        <details class="mt-2">
+            <summary class="small text-muted">历史分析留痕（{{ llm_records|length }} 条，可回看当时送给模型的证据与结论）</summary>
+            <table class="table table-sm small mt-1 mb-0 vmp-table">
+                <thead><tr><th>#</th><th>状态</th><th>模型</th><th>批次</th><th>证据字数</th><th>耗时</th><th>发起人</th><th>完成时间</th></tr></thead>
+                <tbody>
+                {% for r in llm_records %}
+                <tr>
+                    <td><a href="{% url 'ops_llm_record' r.id %}">{{ r.id }}</a></td>
+                    <td>{{ r.get_status_display }}</td>
+                    <td>{{ r.model|default:"-" }}</td>
+                    <td>{{ r.batch_count }}</td>
+                    <td>{{ r.evidence_chars }}</td>
+                    <td>{{ r.latency_ms }} ms</td>
+                    <td>{{ r.requested_by|default:"-" }}</td>
+                    <td>{{ r.finished_at|date:"Y-m-d H:i:s"|default:"-" }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </details>
+        {% endif %}
+        {% endif %}
+    </div>
+</div>
+
+<script>
+(function () {
+    var card = document.getElementById('llm-card');
+    if (!card) { return; }
+
+    var pingBtn = document.getElementById('llm-ping-btn');
+    var pingOut = document.getElementById('llm-ping-out');
+    if (pingBtn) {
+        pingBtn.addEventListener('click', function () {
+            var tokenEl = document.querySelector('#llm-run-form input[name=csrfmiddlewaretoken]');
+            pingBtn.disabled = true;
+            pingOut.className = 'small text-muted';
+            pingOut.textContent = '正在测试…';
+            fetch("{% url 'ops_llm_ping' %}", {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {'X-CSRFToken': tokenEl ? tokenEl.value : ''}
+            }).then(function (r) { return r.json(); }).then(function (d) {
+                pingBtn.disabled = false;
+                if (d.ok && d.error) {
+                    // 通了但模型没给正式回答（思考型模型只输出 reasoning_content）：
+                    // 连通性这一问已有答案，不能报"不可用"，但也不能把这点如实藏起来。
+                    pingOut.className = 'small text-warning';
+                    pingOut.textContent = d.error + '（' + (d.base_url || '') + '）';
+                } else if (d.ok) {
+                    pingOut.className = 'small text-success';
+                    pingOut.textContent = '连通正常：' + (d.model || '') + '，' + (d.latency_ms || 0) + ' ms';
+                } else {
+                    pingOut.className = 'small text-danger';
+                    pingOut.textContent = '不可用：' + (d.error || '未知错误') + '（' + (d.base_url || '') + '）';
+                }
+            }).catch(function (e) {
+                pingBtn.disabled = false;
+                pingOut.className = 'small text-danger';
+                pingOut.textContent = '请求异常：' + e;
+            });
+        });
+    }
+
+    var running = document.getElementById('llm-running');
+    if (!running) { return; }
+    var hint = document.getElementById('llm-poll-hint');
+    var tries = 0;
+    var timer = setInterval(function () {
+        tries += 1;
+        fetch("{% url 'ops_api_llm_result' task.id %}", {credentials: 'same-origin'})
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.finished) { clearInterval(timer); window.location.reload(); }
+                else if (tries > 240 && hint) {
+                    clearInterval(timer);
+                    hint.textContent = '等待已超过 12 分钟，停止自动刷新；分批分析可能耗时较久，可手动刷新页面，或先点"测试模型连通性"确认模型服务是否正常。';
+                }
+            })
+            .catch(function () {});
+    }, 3000);
+})();
+</script>

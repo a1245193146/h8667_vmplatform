@@ -1,0 +1,55 @@
+---
+# ops_discover_nginx.yml — Nginx 配置只读解析（服务关联发现）
+# 对应脚本: opsanalysis/scripts/discover_nginx.py
+# 用法: ansible-playbook opsanalysis/ansible/ops_discover_nginx.yml -e target_host=<nginx_ip> -e nginx_conf=/usr/lib/nginx/conf/nginx.conf
+# 红线: 只读，绝不 reload/改写 nginx
+- name: Discover nginx config
+  hosts: "{{ target_host }}"
+  gather_facts: false
+  vars:
+    script_dir_resolved: "{{ script_dir | default(playbook_dir ~ '/../scripts', true) }}"
+    remote_script: /tmp/AUTO-ITOPS/discover_nginx.py
+    nginx_conf_resolved: "{{ nginx_conf | default('/usr/lib/nginx/conf/nginx.conf', true) }}"
+  tasks:
+    - name: Check discover_nginx.py exists on controller
+      stat:
+        path: "{{ script_dir_resolved }}/discover_nginx.py"
+      delegate_to: localhost
+      become: false
+      register: st_nginx
+
+    - name: Fail clearly when discover_nginx.py missing
+      fail:
+        msg: "控制器上找不到 {{ script_dir_resolved }}/discover_nginx.py ，请同步 opsanalysis/scripts/ 目录"
+      when: not st_nginx.stat.exists
+
+    - name: Ensure remote temp dir
+      file:
+        path: /tmp/AUTO-ITOPS
+        state: directory
+        mode: '0755'
+
+    - name: Copy discover_nginx.py
+      copy:
+        src: "{{ script_dir_resolved }}/discover_nginx.py"
+        dest: "{{ remote_script }}"
+        mode: '0755'
+
+    - name: Run discover_nginx.py
+      shell: >-
+        PY=$(command -v python3 || command -v python2 || command -v python);
+        "$PY" {{ remote_script }} --conf '{{ nginx_conf_resolved }}'
+      args:
+        executable: /bin/bash
+      register: result
+      changed_when: false
+
+    - name: Print JSON result
+      debug:
+        var: result.stdout
+
+    - name: Cleanup remote temp script
+      file:
+        path: "{{ remote_script }}"
+        state: absent
+      changed_when: false

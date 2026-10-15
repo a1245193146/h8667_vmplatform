@@ -1,0 +1,376 @@
+{% extends "resize/base.html" %}
+{% load static %}
+
+{% block title %}影响分析结果 - 信息系统运维平台{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+    <div class="vmp-page-head">
+        <div>
+            <h1>影响分析：{{ analysis.basic.hostname|default:task.target }}</h1>
+            <p class="vmp-sub">
+                任务 #{{ task.id }}{% if analysis.target_ip %} · {{ analysis.target_ip }}{% endif %}{% if analysis.op_label %} · 模拟操作：{{ analysis.op_label }}{% endif %}
+                —— 全程只读采集，不关机、不重启、不停服务、不改配置。
+            </p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{% url 'ops_index' %}" class="btn btn-sm btn-outline-secondary">运维分析</a>
+            <a href="{% url 'ops_impact_form' %}" class="btn btn-sm btn-primary">新建分析</a>
+        </div>
+    </div>
+
+    {% if task.status != 'success' %}
+    <div class="card" id="pending-card">
+        <div class="card-body text-center py-5">
+            {% if task.status == 'failed' %}
+            <div class="text-danger fs-5">分析失败</div>
+            <pre class="vmp-code-block text-start mt-3">{{ task.error }}</pre>
+            <a href="{% url 'ops_impact_form' %}" class="btn btn-outline-primary">返回重试</a>
+            {% else %}
+            <div class="spinner-border text-primary" role="status"></div>
+            <div class="mt-3 text-muted">
+                正在对 <strong>{{ task.target }}</strong> 进行只读采集与分析（模拟操作：{{ analysis.op_label|default:"—" }}）……
+            </div>
+            <div class="mt-2 small text-muted">页面会自动刷新，请稍候。</div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if task.status == 'success' and analysis %}
+    <div class="alert alert-danger">
+        <strong>模拟分析，未执行任何操作。</strong>
+        以下为"若执行{{ analysis.op_label }}"的预计影响，仅供决策参考。
+    </div>
+
+    <!-- 当前状态 -->
+    <div class="card mb-3">
+        <div class="vmp-card-head">
+            <h2>当前状态</h2>
+            <span class="vmp-hint">采集时刻的实时读数，非历史趋势</span>
+        </div>
+        <div class="card-body">
+            <div class="small text-muted mb-3">
+                操作系统 <strong class="text-body">{{ analysis.basic.os|default:"-" }}</strong>
+            </div>
+            <div class="row g-3">
+                <div class="col-6 col-lg">
+                    <div class="vmp-stat h-100 {% if analysis.basic.cpu_percent >= 90 %}is-bad{% elif analysis.basic.cpu_percent >= 75 %}is-warn{% else %}is-ok{% endif %}">
+                        <div class="vmp-stat-num">{{ analysis.basic.cpu_percent|default:"-" }}<span class="fs-6">%</span></div>
+                        <div class="vmp-stat-label">CPU 使用率</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg">
+                    <div class="vmp-stat h-100 {% if analysis.basic.mem_percent >= 90 %}is-bad{% elif analysis.basic.mem_percent >= 75 %}is-warn{% else %}is-ok{% endif %}">
+                        <div class="vmp-stat-num">{{ analysis.basic.mem_percent|default:"-" }}<span class="fs-6">%</span></div>
+                        <div class="vmp-stat-label">内存使用率</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg">
+                    <div class="vmp-stat h-100">
+                        <div class="vmp-stat-num">{{ analysis.technical_impact.active_connections.established_count }}</div>
+                        <div class="vmp-stat-label">活动连接</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg">
+                    <div class="vmp-stat h-100">
+                        <div class="vmp-stat-num">{{ analysis.technical_impact.active_sessions.session_count }}</div>
+                        <div class="vmp-stat-label">活跃会话</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg">
+                    <div class="vmp-stat h-100">
+                        <div class="vmp-stat-num">{{ analysis.technical_impact.listen_ports|length }}</div>
+                        <div class="vmp-stat-label">监听端口</div>
+                    </div>
+                </div>
+            </div>
+            {% if analysis.basic.disks %}
+            <hr>
+            <div class="row g-2">
+                {% for d in analysis.basic.disks %}
+                <div class="col-md-3">
+                    <div class="small text-muted">{{ d.device }}</div>
+                    <div class="progress" style="height:18px;">
+                        <div class="progress-bar {% if d.percent >= 90 %}vmp-bar-bad{% elif d.percent >= 75 %}vmp-bar-warn{% else %}vmp-bar-ok{% endif %}"
+                             style="width:{{ d.percent }}%">{{ d.percent }}%</div>
+                    </div>
+                    <div class="small text-muted">剩余 {{ d.free_gb }} / {{ d.size_gb }} GB</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 风险提示 -->
+    <div class="card mb-3">
+        <div class="vmp-card-head">
+            <h2>风险提示</h2>
+            <span class="vmp-hint">按规则推导，非因果断言</span>
+        </div>
+        <ul class="list-group list-group-flush">
+            {% for r in analysis.risks %}
+            <li class="list-group-item">
+                <span class="vmp-tag {% if r.level == '高' or r.level == '高危' %}vmp-tag-bad{% elif r.level == '中' or r.level == '中危' %}vmp-tag-warn{% else %}vmp-tag-mute{% endif %}">{{ r.level }}</span>
+                {{ r.text }}
+            </li>
+            {% empty %}
+            <li class="list-group-item text-muted">无明显风险项。</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- 近 N 日操作系统事件（只读采集，Windows/Linux 结构一致） -->
+    <div class="card mb-3">
+        <div class="vmp-card-head">
+            <h2>近 {{ analysis.os_logs.days|default:1 }} 日操作系统事件</h2>
+            <span class="vmp-hint text-end">
+                {% if analysis.os_logs.os_type %}{{ analysis.os_logs.os_type|upper }} · {% endif %}
+                {% if analysis.os_logs.logs_scanned %}日志 {{ analysis.os_logs.logs_scanned|join:"/" }} · {% endif %}
+                匹配 {{ analysis.os_logs.total_matched|default:0 }} 条
+                {% if analysis.os_logs.truncated %}（已达上限截断，返回 {{ analysis.os_logs.returned }} 条{% if analysis.os_logs.dropped %}，丢弃 {{ analysis.os_logs.dropped }} 条{% endif %}）{% endif %}
+            </span>
+        </div>
+        <div class="card-body">
+            {% if not analysis.os_logs.available %}
+            {% if analysis.os_logs.level_filter and not analysis.os_logs.errors %}
+            <div class="alert alert-light border small mb-0">
+                近 {{ analysis.os_logs.days|default:1 }} 日没有级别在「{{ analysis.os_logs.level_filter }}」范围内的操作系统事件——
+                这是"没有符合条件的事件"，不是"没读到日志"；范围外（如 Information 级）的事件按策略不采集，
+                <strong>仍不代表该机无异常</strong>。
+            </div>
+            {% else %}
+            <div class="alert alert-warning small mb-0">
+                未采集到操作系统事件日志——<strong>这不代表该机无异常</strong>，通常是采集账号权限不足或日志源不可用。
+                {% if analysis.os_logs.errors %}
+                <div class="mt-1">采集受限说明：{{ analysis.os_logs.errors|join:"；" }}</div>
+                {% endif %}
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="d-flex flex-wrap gap-1 mb-2">
+                {% for c in analysis.os_logs.count_labels %}
+                <span class="vmp-tag {% if c.kind == 'log_cleared' or c.kind == 'oom' or c.kind == 'crash' %}vmp-tag-bad{% elif c.kind == 'reboot' or c.kind == 'kernel' or c.kind == 'service' or c.kind == 'syslog_err' %}vmp-tag-warn{% else %}vmp-tag-mute{% endif %}">{{ c.label }} {{ c.count }}</span>
+                {% endfor %}
+            </div>
+            <ul class="small text-muted">
+                {% for n in analysis.os_logs.notes %}<li>{{ n }}</li>{% endfor %}
+            </ul>
+            {% if analysis.os_logs.errors %}
+            <div class="alert alert-secondary small mb-2">
+                部分日志源未能读取（存在盲区，非"无异常"）：{{ analysis.os_logs.errors|join:"；" }}
+            </div>
+            {% endif %}
+            <details open>
+                <summary class="text-muted small">
+                    按错误类型聚合
+                    （{{ analysis.os_logs.groups|length }} 类{% if analysis.os_logs.groups_dropped %}，
+                    <span class="text-danger">另有 {{ analysis.os_logs.groups_dropped }} 类未列出</span>{% endif %}）
+                    — 一类一行，次数为窗口内该类错误的总次数
+                </summary>
+                <div class="table-responsive mt-2">
+                    <table class="table table-sm small mb-0 vmp-table">
+                        <thead>
+                        <tr>
+                            <th style="width:90px">级别</th>
+                            <th style="width:120px">分类</th>
+                            <th style="width:180px">来源</th>
+                            <th style="width:80px">事件ID</th>
+                            <th style="width:70px">次数</th>
+                            <th style="width:290px">首次 ~ 最近</th>
+                            <th>原文（该类首条）</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for g in analysis.os_logs.groups %}
+                        <tr>
+                            <td><span class="vmp-tag {% if g.level == 'Critical' or g.level == 'Error' %}vmp-tag-bad{% elif g.level == 'Warning' %}vmp-tag-warn{% else %}vmp-tag-mute{% endif %}">{{ g.level|default:"-" }}</span></td>
+                            <td>{{ g.kind_label|default:g.kind }}</td>
+                            <td class="text-muted text-break">{{ g.source|default:"-" }}{% if g.log %}<br><span class="small">{{ g.log }}</span>{% endif %}</td>
+                            <td>{{ g.id|default:"-" }}</td>
+                            <td class="fw-bold {% if g.count > 50 %}text-danger{% endif %}">{{ g.count }}</td>
+                            <td class="text-nowrap text-muted">{{ g.first_text }}<br>~ {{ g.last_text }}</td>
+                            <td class="text-break">{{ g.sample|default:g.signature }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="7" class="text-muted">无匹配事件</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+            <details class="mt-2">
+                <summary class="text-muted small">事件明细（按重要度排序，最多 {{ analysis.os_logs.highlights|length }} 条）</summary>
+                <div class="table-responsive mt-2">
+                    <table class="table table-sm small mb-0 vmp-table">
+                        <thead>
+                        <tr>
+                            <th style="width:160px">时间</th>
+                            <th style="width:120px">分类</th>
+                            <th style="width:90px">级别</th>
+                            <th style="width:180px">来源</th>
+                            <th>内容</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for e in analysis.os_logs.highlights %}
+                        <tr>
+                            <td class="text-nowrap">{{ e.ts_text|default:"时间不详" }}</td>
+                            <td>
+                                <span class="vmp-tag {% if e.kind == 'log_cleared' or e.kind == 'oom' or e.kind == 'crash' %}vmp-tag-bad{% elif e.level == 'Error' or e.level == 'Critical' or e.level == 'Warning' %}vmp-tag-warn{% else %}vmp-tag-mute{% endif %}">{{ e.kind_label }}</span>
+                            </td>
+                            <td>{{ e.level|default:"-" }}</td>
+                            <td class="text-muted">{{ e.source|default:"-" }}{% if e.log %}<br><span class="small">{{ e.log }}</span>{% endif %}</td>
+                            <td class="text-break">{{ e.message }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="text-muted">无匹配事件</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <!-- 技术影响 -->
+        <div class="col-md-7">
+            <div class="card h-100">
+                <div class="vmp-card-head">
+                    <h2>技术影响范围</h2>
+                    <span class="vmp-hint">按规则推导，不含因果断言</span>
+                </div>
+                <div class="card-body">
+                    <h6>直接影响</h6>
+                    <ul class="small">{% for x in analysis.technical_impact.direct %}<li>{{ x }}</li>{% empty %}<li class="text-muted">无</li>{% endfor %}</ul>
+                    <h6 class="mt-3">间接影响</h6>
+                    <ul class="small">{% for x in analysis.technical_impact.indirect %}<li>{{ x }}</li>{% empty %}<li class="text-muted">无</li>{% endfor %}</ul>
+
+                    <h6 class="mt-3">监听端口</h6>
+                    <div class="small text-muted">{{ analysis.technical_impact.listen_ports|join:", "|default:"-" }}</div>
+
+                    <h6 class="mt-3">活动连接来源 IP（TOP）</h6>
+                    <table class="table table-sm small mb-0 vmp-table">
+                        <thead><tr><th>来源 IP</th><th>连接数</th></tr></thead>
+                        <tbody>
+                        {% for r in analysis.technical_impact.active_connections.remote_ip_top %}
+                        <tr><td>{{ r.ip }}</td><td>{{ r.count }}</td></tr>
+                        {% empty %}<tr><td colspan="2" class="text-muted">无活动连接</td></tr>{% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 业务影响 -->
+        <div class="col-md-5">
+            <div class="card h-100">
+                <div class="vmp-card-head">
+                    <h2>业务用户影响范围</h2>
+                    <span class="vmp-hint">依赖服务关联登记</span>
+                </div>
+                <div class="card-body">
+                    {% if not analysis.business_impact.assessable %}
+                    <div class="alert alert-secondary small mb-2">{{ analysis.business_impact.note }}</div>
+                    {% endif %}
+                    <h6>受影响对外域名</h6>
+                    <div class="small d-flex flex-wrap gap-1">
+                        {% for d in analysis.business_impact.affected_domains %}
+                        <span class="vmp-tag vmp-tag-info">{{ d }}</span>
+                        {% empty %}<span class="text-muted">未登记指向本机的对外域名</span>{% endfor %}
+                    </div>
+                    <h6 class="mt-3">当前登录用户</h6>
+                    <div class="small">{{ analysis.business_impact.logged_on_users|join:", "|default:"-" }}</div>
+                    <h6 class="mt-3">承载应用（关联登记）</h6>
+                    <ul class="small mb-0">
+                        {% for s in analysis.technical_impact.related_services %}
+                        <li>{{ s.name }}{% if s.port %} :{{ s.port }}{% endif %} <span class="text-muted">（{{ s.status }}）</span></li>
+                        {% empty %}<li class="text-muted">无</li>{% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 运行应用/服务明细（折叠） -->
+    <div class="card mt-3">
+        <div class="vmp-card-head">
+            <h2>采集明细</h2>
+            <span class="vmp-hint">截断与缺失一律显式声明</span>
+        </div>
+        <div class="card-body">
+            <details open>
+                <summary class="text-muted">
+                    运行中的服务
+                    （共 {{ analysis.technical_impact.running_services_total|default:analysis.technical_impact.running_services|length }} 个，
+                    下方列出 {{ analysis.technical_impact.running_services|length }} 个{% if analysis.technical_impact.running_services_dropped %}，
+                    <span class="text-danger">另有 {{ analysis.technical_impact.running_services_dropped }} 个未列出</span>{% endif %}）
+                </summary>
+                <div class="small mt-2 d-flex flex-wrap gap-1">
+                    {% for s in analysis.technical_impact.running_services %}<span class="vmp-tag {% if s.related %}vmp-tag-info{% else %}vmp-tag-mute{% endif %}" title="{{ s.name }}｜{{ s.status }}｜{{ s.start_mode }}">{{ s.display_name|default:s.name }}</span> {% endfor %}
+                    {% if not analysis.technical_impact.running_services %}<span class="text-muted">未采到</span>{% endif %}
+                </div>
+                <div class="small text-muted mt-1">蓝色标记 = 与本机已登记应用相关。</div>
+            </details>
+            <details class="mt-2">
+                <summary class="text-muted">
+                    非运行状态的服务（停止/暂停等）
+                    （共 {{ analysis.technical_impact.stopped_services_total|default:analysis.technical_impact.stopped_services|length }} 个，
+                    下方列出 {{ analysis.technical_impact.stopped_services|length }} 个{% if analysis.technical_impact.stopped_services_dropped %}，
+                    <span class="text-danger">另有 {{ analysis.technical_impact.stopped_services_dropped }} 个未列出</span>{% endif %}）
+                </summary>
+                <div class="table-responsive mt-2">
+                    <table class="table table-sm small mb-0 vmp-table">
+                        <thead><tr><th>服务名</th><th>显示名</th><th style="width:100px">状态</th><th style="width:100px">启动类型</th></tr></thead>
+                        <tbody>
+                        {% for s in analysis.technical_impact.stopped_services %}
+                        <tr class="{% if s.start_mode|lower|slice:":4" == 'auto' %}table-warning{% endif %}">
+                            <td class="text-break">{{ s.name }}</td>
+                            <td class="text-muted">{{ s.display_name|default:"-" }}</td>
+                            <td>{{ s.status|default:"-" }}</td>
+                            <td>{{ s.start_mode|default:"-" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-muted">无</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="small text-muted mt-1">黄色行 = 设为自动启动却处于停止，这类往往就是既有故障。</div>
+            </details>
+            <details class="mt-2">
+                <summary class="text-muted">
+                    检测到的应用进程（{{ analysis.technical_impact.related_apps|length }}）
+                    {% if analysis.technical_impact.processes_total %}｜本机进程总数 {{ analysis.technical_impact.processes_total }}{% if analysis.technical_impact.processes_truncated %}<span class="text-danger">（采集端已截断，非全量）</span>{% endif %}{% endif %}
+                </summary>
+                <ul class="small mt-2">{% for a in analysis.technical_impact.related_apps %}<li>{{ a.name }}{% if a.port %} :{{ a.port }}{% endif %}{% if a.stdout_logfile %} — {{ a.stdout_logfile }}{% endif %}</li>{% empty %}<li class="text-muted">无</li>{% endfor %}</ul>
+            </details>
+        </div>
+    </div>
+
+    {% include "opsanalysis/_llm_panel.html" %}
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if task.status == 'pending' or task.status == 'running' %}
+<script>
+(function () {
+    var url = "{% url 'ops_api_impact_result' task.id %}";
+    var timer = setInterval(function () {
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.finished) { clearInterval(timer); window.location.reload(); }
+            })
+            .catch(function () {});
+    }, 3000);
+})();
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,90 @@
+{% extends "resize/base.html" %}
+{% load static %}
+
+{% block title %}运维分析 - 信息系统运维平台{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+    <div class="vmp-page-head">
+        <div>
+            <h1>运维分析</h1>
+            <p class="vmp-sub">
+                全程只读：只采集与分析，不关机、不重启、不停服务、不改配置。
+                "模拟操作"只是给出影响范围与风险提示，任何变更都不由本模块下发
+                （需要下发命令请到「服务器运维」，那是另一个会留痕的可写模块）。
+            </p>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg">
+            <div class="vmp-stat h-100">
+                <div class="vmp-stat-num">{{ service_total }}</div>
+                <div class="vmp-stat-label">服务关联登记</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg">
+            <div class="vmp-stat h-100 is-ok">
+                <div class="vmp-stat-num">{{ service_confirmed }}</div>
+                <div class="vmp-stat-label">已确认</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg">
+            <div class="vmp-stat h-100 {% if service_candidate %}is-warn{% endif %}">
+                <div class="vmp-stat-num">{{ service_candidate }}</div>
+                <div class="vmp-stat-label">待确认</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg">
+            <div class="vmp-stat h-100">
+                <div class="vmp-stat-num">{{ task_total }}</div>
+                <div class="vmp-stat-label">分析任务总数</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="vmp-card-head">
+                    <h2>服务器操作影响分析</h2>
+                    <span class="vmp-hint">只读采集</span>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-3">
+                        输入服务器 IP，采集当前状态（用户 / 会话 / 连接 / 端口 / 进程 / 服务），
+                        在关机、重启、停服务等"模拟操作"前给出技术与业务影响范围及风险提示。
+                    </p>
+                    <a href="{% url 'ops_impact_form' %}" class="btn btn-outline-secondary btn-sm">进入</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="vmp-card-head">
+                    <h2>服务故障辅助排查</h2>
+                    <span class="vmp-hint">不下因果断言</span>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-3">
+                        输入"某服务无法访问"，关联 Jenkins / Supervisor / Nginx / DNS / 应用日志，
+                        汇聚成时间线，严格区分已确认事实、时间关联、推测与建议。
+                    </p>
+                    <a href="{% url 'ops_troubleshoot_form' %}" class="btn btn-outline-secondary btn-sm">进入</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mt-3">
+        <div class="card-body small text-muted">
+            <strong class="text-body">服务关联登记</strong>：影响分析与故障排查都靠这张表把
+            "IP / 端口 / 进程"对应到"哪个业务服务"。自动发现只产生<strong class="text-body">待确认</strong>候选，
+            <strong class="text-body">绝不覆盖人工已确认的内容</strong>；确认状态一旦人工设定，后续采集不再改写。
+            <a href="{% url 'ops_services' %}" class="ms-1">进入登记 / 自动发现</a>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

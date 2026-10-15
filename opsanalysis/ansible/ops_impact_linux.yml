@@ -1,0 +1,59 @@
+---
+# ops_impact_linux.yml — Linux 服务器操作影响分析（只读采集）
+# 对应脚本: opsanalysis/scripts/collect_ops_impact.py
+# 用法: ansible-playbook opsanalysis/ansible/ops_impact_linux.yml -e target_host=x.x.x.x
+# 输出: python 脚本的单行 JSON 原样打印到 stdout（与 Windows 采集器结构一致）
+# 红线: 全程只读，绝不执行关机/重启/停服务等危险操作
+# 作者: AUTO-GENERATED (opsanalysis module)
+
+- name: Collect Linux server impact snapshot
+  hosts: "{{ target_host }}"
+  gather_facts: false
+  vars:
+    # 采集脚本目录：默认 <playbook目录>/../scripts，可用 -e script_dir= 覆盖。
+    script_dir_resolved: "{{ script_dir | default(playbook_dir ~ '/../scripts', true) }}"
+    remote_script: /tmp/AUTO-ITOPS/collect_ops_impact.py
+  tasks:
+    - name: Check collect_ops_impact.py exists on Ansible controller
+      stat:
+        path: "{{ script_dir_resolved }}/collect_ops_impact.py"
+      delegate_to: localhost
+      become: false
+      register: py_stat_ops_impact
+
+    - name: Fail clearly when collect_ops_impact.py missing
+      fail:
+        msg: "Ansible 控制器上找不到脚本 {{ script_dir_resolved }}/collect_ops_impact.py ，请把仓库 opsanalysis/scripts/ 目录放到该位置，或用 -e script_dir= 指定脚本目录"
+      when: not py_stat_ops_impact.stat.exists
+
+    - name: Ensure remote temp dir exists
+      file:
+        path: /tmp/AUTO-ITOPS
+        state: directory
+        mode: '0755'
+
+    - name: Copy collect_ops_impact.py to target
+      copy:
+        src: "{{ script_dir_resolved }}/collect_ops_impact.py"
+        dest: "{{ remote_script }}"
+        mode: '0755'
+
+    - name: Run collect_ops_impact.py (auto-detect python interpreter)
+      shell: >-
+        PY=$(command -v python3 || command -v python2 || command -v python);
+        "$PY" {{ remote_script }} --app-log '{{ app_log_path | default('', true) }}'
+        --os-log-days {{ os_log_days | default(1, true) }}
+      args:
+        executable: /bin/bash
+      register: result
+      changed_when: false
+
+    - name: Print JSON result
+      debug:
+        var: result.stdout
+
+    - name: Cleanup remote temp script
+      file:
+        path: "{{ remote_script }}"
+        state: absent
+      changed_when: false

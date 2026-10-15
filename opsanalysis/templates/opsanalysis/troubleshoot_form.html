@@ -1,0 +1,82 @@
+{% extends "resize/base.html" %}
+{% load static %}
+
+{% block title %}服务故障辅助排查 - 信息系统运维平台{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+    <div class="vmp-page-head">
+        <div>
+            <h1>服务故障辅助排查</h1>
+            <p class="vmp-sub">
+                "某服务访问不了"——关联应用服务器 / supervisor / Nginx / DNS / Jenkins 的只读信号，
+                汇成一条时间线辅助定位。
+            </p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{% url 'ops_index' %}" class="btn btn-sm btn-outline-secondary">运维分析</a>
+            <a href="{% url 'ops_tasks' %}" class="btn btn-sm btn-outline-secondary">历史任务</a>
+        </div>
+    </div>
+
+    <div class="alert alert-warning small">
+        <strong>只读排查，绝不执行任何修复动作。</strong>
+        本功能仅关联 应用服务器状态 / supervisor / Nginx 日志 / DNS / Jenkins 构建 等只读信号，
+        汇聚成时间线，并<strong>严格区分</strong>：已确认事实、时间关联、推测原因、建议检查。
+        <strong>"同时发生"不等于"因果关系"</strong>，推测项均需人工确认。
+    </div>
+
+    <div class="vmp-filterbar">
+            <form method="post" action="{% url 'ops_troubleshoot_run' %}">
+                {% csrf_token %}
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-7">
+                        <label class="form-label">选择要排查的服务（来自服务关联登记）</label>
+                        <select class="form-select" name="service_id" required>
+                            <option value="">— 请选择 —</option>
+                            {% for s in services %}
+                            <option value="{{ s.id }}" {% if preselect == s.id|stringformat:"s" %}selected{% endif %}>
+                                {{ s.canonical_name }}
+                                {% if s.domains %}（{{ s.domains|join:"/" }}）{% endif %}
+                                {% if s.server_ips %}[{{ s.server_ips|join:"," }}{% if s.port %}:{{ s.port }}{% endif %}]{% endif %}
+                                {% if s.status == 'candidate' %}· 待确认{% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">
+                            找不到目标服务？先到 <a href="{% url 'ops_services' %}">服务关联登记</a> 运行自动发现或人工登记。
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">时间窗口</label>
+                        <select class="form-select" name="window_min">
+                            {% for v, label in window_choices %}
+                            <option value="{{ v }}" {% if v == 30 %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-primary w-100" type="submit">开始排查</button>
+                    </div>
+                </div>
+            </form>
+    </div>
+
+    <div class="card mt-3">
+        <div class="vmp-card-head">
+            <h2>排查会关联哪些只读信号</h2>
+            <span class="vmp-hint">全部只读，不下发任何修复动作</span>
+        </div>
+        <div class="card-body small text-muted">
+            <ul class="mb-0">
+                <li><strong>应用服务器</strong>：目标端口是否监听、应用进程是否存在、CPU/内存、运行时长（疑似刚重启）。</li>
+                <li><strong>Supervisor</strong>：程序状态（RUNNING / EXITED / FATAL / BACKOFF）。</li>
+                <li><strong>Nginx</strong>：窗口内 access 日志 5xx（502/503/504）计数、error 日志 upstream 错误（connection refused / timed out / no live upstreams）。</li>
+                <li><strong>DNS</strong>：域名在各 DNS 服务器的解析结果，是否与登记后端一致。</li>
+                <li><strong>Jenkins</strong>：对应 job 最近构建时间/结果/提交，用于把"最近部署"放进时间线。</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

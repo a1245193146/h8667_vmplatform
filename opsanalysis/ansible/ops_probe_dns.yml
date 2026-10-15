@@ -1,0 +1,39 @@
+---
+# ops_probe_dns.yml — 域名解析只读探测（服务故障排查）
+# 脚本: opsanalysis/scripts/probe_dns.py
+# 用法: ansible-playbook opsanalysis/ansible/ops_probe_dns.yml -e target_host=<探测机IP> -e domain=ywops.4307.com -e dns_servers=192.168.2.86,192.168.2.66,192.168.2.105
+# 红线: 只读，仅 nslookup/getent/ping，绝不改 DNS
+- name: Probe DNS resolution
+  hosts: "{{ target_host }}"
+  gather_facts: false
+  vars:
+    script_dir_resolved: "{{ script_dir | default(playbook_dir ~ '/../scripts', true) }}"
+    remote_script: /tmp/AUTO-ITOPS/probe_dns.py
+    dns_servers_resolved: "{{ dns_servers | default('192.168.2.86,192.168.2.66,192.168.2.105', true) }}"
+  tasks:
+    - name: Check probe_dns.py exists on controller
+      stat:
+        path: "{{ script_dir_resolved }}/probe_dns.py"
+      delegate_to: localhost
+      become: false
+      register: st_dns
+    - name: Fail clearly when probe_dns.py missing
+      fail:
+        msg: "控制器上找不到 {{ script_dir_resolved }}/probe_dns.py ，请同步 opsanalysis/scripts/ 目录"
+      when: not st_dns.stat.exists
+    - name: Ensure remote temp dir
+      file: { path: /tmp/AUTO-ITOPS, state: directory, mode: '0755' }
+    - name: Copy probe_dns.py
+      copy: { src: "{{ script_dir_resolved }}/probe_dns.py", dest: "{{ remote_script }}", mode: '0755' }
+    - name: Run probe_dns.py
+      shell: >-
+        PY=$(command -v python3 || command -v python2 || command -v python);
+        "$PY" {{ remote_script }} --domain '{{ domain }}' --servers '{{ dns_servers_resolved }}'
+      args: { executable: /bin/bash }
+      register: result
+      changed_when: false
+    - name: Print JSON result
+      debug: { var: result.stdout }
+    - name: Cleanup remote temp script
+      file: { path: "{{ remote_script }}", state: absent }
+      changed_when: false

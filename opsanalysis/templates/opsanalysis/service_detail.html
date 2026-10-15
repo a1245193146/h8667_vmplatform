@@ -1,0 +1,179 @@
+{% extends "resize/base.html" %}
+{% load static %}
+
+{% block title %}{{ svc.canonical_name }} - 服务关联登记{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+    <div class="vmp-page-head">
+        <div>
+            <h1>{{ svc.canonical_name }}
+                {% if svc.status == 'confirmed' %}<span class="vmp-tag vmp-tag-ok">已确认</span>
+                {% else %}<span class="vmp-tag vmp-tag-warn">待确认</span>{% endif %}
+                <span class="vmp-tag vmp-tag-mute">{{ svc.get_source_display }}</span>
+                {% if svc.last_online_at %}
+                <span class="vmp-tag {% if svc.online_recent %}vmp-tag-ok{% else %}vmp-tag-mute{% endif %}"
+                      title="最近一次自动发现确认部署服务器在线：{{ svc.last_online_at|date:"Y-m-d H:i" }}">最近在线 {{ svc.online_ago_text }}</span>
+                {% else %}
+                <span class="vmp-tag vmp-tag-mute" title="尚未探测到在线；运行一次自动发现后更新">最近在线 未知</span>
+                {% endif %}
+            </h1>
+            <p class="vmp-sub">
+                人工确认过的内容不会被后续自动发现覆盖；这里的字段同时供影响分析与故障排查使用。
+            </p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{% url 'ops_services' %}" class="btn btn-sm btn-outline-secondary">返回列表</a>
+            {% if svc.server_ips %}
+            <a class="btn btn-sm btn-outline-secondary"
+               href="{% url 'ops_impact_form' %}?ip={{ svc.server_ips|first }}">对该IP做影响分析</a>
+            {% endif %}
+            {% if svc.status == 'candidate' %}
+            <form method="post" action="{% url 'ops_service_confirm' svc.pk %}">
+                {% csrf_token %}
+                <button class="btn btn-sm btn-primary" type="submit">标记为已确认</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if svc.confidence %}
+    <div class="alert alert-light border small">
+        <div class="fw-semibold mb-1">匹配依据（自动发现留痕）</div>
+        <pre class="mb-0 text-muted" style="white-space:pre-wrap;">{{ svc.confidence }}</pre>
+    </div>
+    {% endif %}
+
+    <form method="post" action="{% url 'ops_service_update' svc.pk %}">
+        {% csrf_token %}
+        <div class="card mb-3">
+            <div class="vmp-card-head">
+                <h2>关联信息（人工可维护）</h2>
+                <span class="vmp-hint">带 * 的必填，其余留空表示未登记</span>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">应用统一名 <span class="text-danger">*</span></label>
+                        <input class="form-control" name="canonical_name" value="{{ svc.canonical_name }}" required maxlength="128">
+                        <div class="form-text">收敛各系统里的不同叫法，作为唯一标识。</div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">端口</label>
+                        <input class="form-control" name="port" type="number" min="1" max="65535" value="{{ svc.port|default_if_none:'' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">操作系统</label>
+                        <select class="form-select" name="os_type">
+                            {% for v, label in os_types %}
+                            <option value="{{ v }}" {% if svc.os_type == v %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">各系统别名</label>
+                        <textarea class="form-control" name="aliases_text" rows="3" placeholder="每行一个">{{ aliases_text }}</textarea>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">对外域名</label>
+                        <textarea class="form-control" name="domains_text" rows="3" placeholder="每行一个">{{ domains_text }}</textarea>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">部署服务器IP</label>
+                        <textarea class="form-control" name="server_ips_text" rows="3" placeholder="每行一个">{{ server_ips_text }}</textarea>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Supervisor 程序名</label>
+                        <input class="form-control" name="supervisor_program" value="{{ svc.supervisor_program }}" maxlength="255">
+                        {% if svc.supervisor_web_urls %}
+                        <div class="form-text">
+                            <div class="text-muted mb-1">每台部署服务器本机 supervisor 面板（端口 9999，首次访问按提示输入面板账号）：</div>
+                            <ul class="mb-0 ps-3">
+                                {% for e in svc.supervisor_web_urls %}
+                                <li>
+                                    <code>{{ e.ip }}</code>
+                                    <a href="{{ e.home }}" target="_blank" rel="noopener">面板↗</a>
+                                    {% if e.log %}· <a href="{{ e.log }}" target="_blank" rel="noopener">该程序日志 logtail↗</a>{% endif %}
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Jenkins Job</label>
+                        <input class="form-control" name="jenkins_job" value="{{ svc.jenkins_job }}" maxlength="255">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Git 项目</label>
+                        <input class="form-control" name="git_project" value="{{ svc.git_project }}" maxlength="255">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">应用日志路径</label>
+                        <input class="form-control" name="app_log_path" value="{{ svc.app_log_path }}" maxlength="500">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Nginx 访问日志</label>
+                        <input class="form-control" name="nginx_access_log" value="{{ svc.nginx_access_log }}" maxlength="500">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Nginx 错误日志</label>
+                        <input class="form-control" name="nginx_error_log" value="{{ svc.nginx_error_log }}" maxlength="500">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">状态</label>
+                        <select class="form-select" name="status">
+                            <option value="candidate" {% if svc.status == 'candidate' %}selected{% endif %}>待确认</option>
+                            <option value="confirmed" {% if svc.status == 'confirmed' %}selected{% endif %}>已确认</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">备注</label>
+                        <textarea class="form-control" name="remark" rows="2">{{ svc.remark }}</textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+                <span class="text-muted small">
+                    创建 {{ svc.created_at|date:"Y-m-d H:i" }} · 更新 {{ svc.updated_at|date:"Y-m-d H:i" }}
+                </span>
+                <div class="d-flex gap-2">
+                    <a class="btn btn-outline-secondary" href="{% url 'ops_services' %}">返回列表</a>
+                    <button class="btn btn-primary" type="submit">保存</button>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <div class="card">
+        <div class="vmp-card-head">
+            <h2>相关分析任务</h2>
+            <span class="vmp-hint">最近 20 条</span>
+        </div>
+        <table class="table table-sm mb-0 align-middle vmp-table">
+            <thead><tr><th>#</th><th>类型</th><th>目标</th><th>状态</th><th>时间</th><th></th></tr></thead>
+            <tbody>
+            {% for t in related_tasks %}
+                <tr>
+                    <td>{{ t.id }}</td><td>{{ t.get_kind_display }}</td><td>{{ t.target }}</td>
+                    <td>{{ t.get_status_display }}</td>
+                    <td>{{ t.created_at|date:"Y-m-d H:i:s" }}</td>
+                    <td>{% if t.kind == 'impact' %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'ops_impact_result' t.id %}">查看</a>{% endif %}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="6" class="text-center text-muted py-3">暂无相关任务</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <form method="post" action="{% url 'ops_service_delete' svc.pk %}" class="mt-3"
+          onsubmit="return confirm('确认删除关联登记「{{ svc.canonical_name }}」？此操作不可撤销。');">
+        {% csrf_token %}
+        <button class="btn btn-sm btn-outline-danger" type="submit">删除此登记</button>
+    </form>
+</div>
+{% endblock %}
