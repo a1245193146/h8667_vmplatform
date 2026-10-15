@@ -1,0 +1,136 @@
+{% extends "resize/base.html" %}
+{% load static %}
+
+{% block title %}问答历史 - 服务器运维{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+    <div class="vmp-page-head">
+        <div>
+            <h1>问答历史</h1>
+            <p class="vmp-sub">
+                问过什么、模型答了什么，全部落库可回看。这份记录同时是审计材料：
+                它证明"命令是人写/人选的"，模型只产出过文本，从未触发过任何执行。
+            </p>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'serverops_console' %}">回到命令控制台</a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-4">
+            <div class="vmp-stat">
+                <div class="vmp-stat-num">{{ stat_total }}</div>
+                <div class="vmp-stat-label">累计提问</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4">
+            <div class="vmp-stat">
+                <div class="vmp-stat-num">{{ stat_sessions }}</div>
+                <div class="vmp-stat-label">会话数</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4">
+            <div class="vmp-stat is-warn">
+                <div class="vmp-stat-num">{{ stat_failed }}</div>
+                <div class="vmp-stat-label">回答失败次数</div>
+            </div>
+        </div>
+    </div>
+
+    <form method="get" class="vmp-filterbar">
+        <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-6">
+                <label class="form-label" for="f-q">提问关键字</label>
+                <input class="form-control" id="f-q" name="q" value="{{ f_q }}"
+                       placeholder="如 服务 / 端口 / 事件日志">
+            </div>
+            <div class="col-12 col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">查询</button>
+                <a class="btn btn-outline-secondary btn-sm" href="{% url 'serverops_chat_history' %}">重置</a>
+            </div>
+        </div>
+    </form>
+
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 vmp-table">
+                <thead>
+                <tr>
+                    <th style="width:132px;">时间</th>
+                    <th style="width:96px;">发起人</th>
+                    <th>提问</th>
+                    <th style="width:88px;">目标系统</th>
+                    <th style="width:130px;">目标主机</th>
+                    <th style="width:96px;">回答</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for it in items %}
+                <tr class="vmp-row-click" data-vmp-toggle="#qa-{{ it.q.pk }}" aria-expanded="false"
+                    title="点击展开完整问答">
+                    <td class="small text-nowrap">{{ it.q.created_at|date:"m-d H:i:s" }}</td>
+                    <td class="small">{{ it.q.created_by|default:"-" }}</td>
+                    <td>
+                        <span class="small">{{ it.q.content|truncatechars:120 }}</span>
+                    </td>
+                    <td class="small">{{ it.q.os_type|default:"-" }}</td>
+                    <td class="small"><span class="vmp-code">{{ it.q.host|default:"-" }}</span></td>
+                    <td>
+                        {% if not it.a %}
+                        <span class="vmp-tag vmp-tag-mute">无回答</span>
+                        {% elif it.a.status == 'pending' %}
+                        <span class="vmp-tag vmp-tag-info">生成中</span>
+                        {% elif it.a.ok %}
+                        <span class="vmp-tag vmp-tag-ok">已回答</span>
+                        {% else %}
+                        <span class="vmp-tag vmp-tag-bad">失败</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr class="vmp-row-detail" id="qa-{{ it.q.pk }}" hidden>
+                    <td colspan="6">
+                        <div class="vmp-row-detail-inner">
+                            <div class="small text-muted mb-1">
+                                会话 <span class="vmp-code">{{ it.q.session }}</span>
+                                {% if it.a and it.a.model %} · 模型 <span class="vmp-code">{{ it.a.model }}</span>{% endif %}
+                                {% if it.a and it.a.latency_ms %} · {{ it.a.latency_ms }} ms{% endif %}
+                            </div>
+                            <div class="small text-muted mb-1">提问全文</div>
+                            <pre class="vmp-code-block mb-3" style="max-height:180px;background:#f4efe5;color:#3d382f;">{{ it.q.content }}</pre>
+                            {% if it.a %}
+                                {% if it.a.ok %}
+                                <div class="small text-muted mb-1">模型回答（仅文本，无执行能力）</div>
+                                <pre class="vmp-code-block" style="max-height:360px;">{{ it.a.content|default:"（模型返回了空内容）" }}</pre>
+                                {% else %}
+                                <div class="alert alert-danger py-2 px-3 small mb-0">
+                                    回答失败：{{ it.a.error|default:"未知错误" }}
+                                </div>
+                                {% endif %}
+                            {% else %}
+                            <div class="small text-muted">
+                                这条提问没有对应的回答记录（可能任务未派发成功，或回答仍在生成）。
+                            </div>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6">
+                        {% include "resize/partials/_empty.html" with text="还没有问答记录" hint="到「运维问答」里问一句试试；只是记不清参数的话，命令控制台右侧的速查更快。" %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="card-body pt-0">
+            {% include "resize/partials/_pagination.html" with page=page %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}

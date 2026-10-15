@@ -1,0 +1,389 @@
+{% extends "resize/base.html" %}
+{% load static %}
+
+{% block title %}执行详情 #{{ job.pk }} - 服务器运维{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+    <div class="vmp-page-head">
+        <div>
+            <h1>
+                执行详情 #{{ job.pk }}
+                <span class="vmp-tag ms-2 {% if job.status == 'success' %}vmp-tag-ok{% elif job.status == 'partial' %}vmp-tag-warn{% elif job.status == 'pending' or job.status == 'running' %}vmp-tag-info{% else %}vmp-tag-bad{% endif %}"
+                      id="statusTag" style="font-size:.85rem;">{{ job.get_status_display }}</span>
+                <span class="vmp-tag ms-1 {% if job.tier == 'L1' %}vmp-tag-ok{% elif job.tier == 'L2' %}vmp-tag-warn{% else %}vmp-tag-bad{% endif %}"
+                      style="font-size:.85rem;">{{ job.tier }} {{ job.get_tier_display }}</span>
+            </h1>
+            <p class="vmp-sub">
+                {{ job.created_by }} 于 {{ job.created_at|date:"Y-m-d H:i:s" }} 发起
+                {% if job.reason %} · 原因：{{ job.reason }}{% endif %}
+            </p>
+        </div>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            {% if not job.finished %}
+            <span class="text-muted small" id="pollHint">执行中，页面会自动刷新…</span>
+            {% endif %}
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'serverops_jobs' %}">执行记录</a>
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'serverops_console' %}">回到控制台</a>
+        </div>
+    </div>
+
+    {% if job.error %}
+    <div class="alert alert-danger">
+        <div class="fw-bold mb-1">本次执行未全部成功</div>
+        <div style="white-space:pre-wrap;">{{ job.error }}</div>
+    </div>
+    {% endif %}
+
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-2">
+            <div class="vmp-stat is-ok">
+                <div class="vmp-stat-num" id="stOk">{{ job.ok_count }}</div>
+                <div class="vmp-stat-label">成功</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="vmp-stat is-bad">
+                <div class="vmp-stat-num" id="stFailed">{{ job.failed_count }}</div>
+                <div class="vmp-stat-label">失败</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="vmp-stat is-warn">
+                <div class="vmp-stat-num" id="stUnreach">{{ job.unreachable_count }}</div>
+                <div class="vmp-stat-label">不可达</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="vmp-stat">
+                <div class="vmp-stat-num" id="stSkip">{{ job.skipped_count }}</div>
+                <div class="vmp-stat-label">已跳过</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="vmp-stat">
+                <div class="vmp-stat-num">{{ job.target_count }}</div>
+                <div class="vmp-stat-label">目标台数</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="vmp-stat">
+                <div class="vmp-stat-num" id="stMs">{{ job.duration_ms }}</div>
+                <div class="vmp-stat-label">耗时（毫秒）</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="vmp-card-head">
+            <h2>命令与判级</h2>
+            <span class="vmp-hint">"命令原文"是人敲的，"实际下发"才是控制机跑的——两者都要看</span>
+        </div>
+        <div class="card-body pt-0">
+            <div class="small text-muted mb-1">命令原文（{{ job.get_mode_display }}{% if job.become %} · 提权{% endif %}）</div>
+            <pre class="vmp-code-block mb-3" style="max-height:220px;">{{ job.command }}</pre>
+
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="small text-muted">实际下发到控制机的完整命令</span>
+                <button type="button" class="btn btn-link btn-sm p-0" data-copy="#resolvedCmd">复制</button>
+            </div>
+            {% if job.resolved_command %}
+            <pre class="vmp-code-block mb-1" id="resolvedCmd" style="max-height:200px;">{{ job.resolved_command }}</pre>
+            {% else %}
+            <div class="alert alert-warning py-2 small mb-1">
+                没有记录到实际下发的命令串。这通常意味着任务在生成命令之前就失败了，
+                <strong>命令未下发到任何主机</strong>。
+            </div>
+            {% endif %}
+
+            <div class="row g-3 mt-2">
+                <div class="col-12 col-lg-6">
+                    <dl class="dl-group row g-2 mb-0 small">
+                        <dt class="col-4">目标系统</dt><dd class="col-8">{{ job.get_os_type_display }}</dd>
+                        <dt class="col-4">inventory</dt><dd class="col-8"><span class="vmp-code">{{ job.inventory|default:"-" }}</span></dd>
+                        <dt class="col-4">灰度主机</dt>
+                        <dd class="col-8">
+                            {% if job.canary %}<span class="vmp-code">{{ job.canary }}</span>
+                            <span class="text-muted">（先试这一台，失败即中止全量）</span>
+                            {% else %}<span class="text-muted">未启用，直接全量下发</span>{% endif %}
+                        </dd>
+                        <dt class="col-4">整批超时</dt><dd class="col-8">{{ job.timeout_sec }} 秒</dd>
+                        {# 确认口令机制已取消：这一行只在历史任务上出现，新任务留空就整行不渲染， #}
+                        {# 否则页面上会出现"本次不需要"，让人以为机制还在、只是这次没触发。 #}
+                        {% if job.confirm_token %}
+                        <dt class="col-4">确认口令</dt>
+                        <dd class="col-8"><span class="vmp-code">{{ job.confirm_token }}</span>
+                            <span class="text-muted">（旧版本 L3 要求手输）</span></dd>
+                        {% endif %}
+                        <dt class="col-4">开始 / 结束</dt>
+                        <dd class="col-8">
+                            {{ job.started_at|date:"H:i:s"|default:"-" }} →
+                            {{ job.finished_at|date:"H:i:s"|default:"-" }}
+                        </dd>
+                    </dl>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="small text-muted mb-1">判级依据</div>
+                    <div class="small mb-2">
+                        <span class="vmp-tag {% if job.tier == 'L1' %}vmp-tag-ok{% elif job.tier == 'L2' %}vmp-tag-warn{% else %}vmp-tag-bad{% endif %}">
+                            {{ job.tier }} {{ job.get_tier_display }}</span>
+                        <span class="text-muted ms-1">{{ detail.help|default:"-" }}</span>
+                    </div>
+                    {% if detail.matched %}
+                    <div class="small text-muted mb-1">命中规则</div>
+                    <div class="mb-2">
+                        {% for m in detail.matched %}
+                        <span class="vmp-tag {% if m.tier == 'L1' %}vmp-tag-ok{% elif m.tier == 'L2' %}vmp-tag-warn{% else %}vmp-tag-bad{% endif %} me-1 mb-1">{{ m.tier }} {{ m.label }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    {% if detail.unknown %}
+                    <div class="small text-muted mb-1">认不出的命令段（按 L2 处理）</div>
+                    <div class="mb-2">
+                        {% for u in detail.unknown %}<span class="vmp-code me-1">{{ u }}</span>{% endfor %}
+                    </div>
+                    {% endif %}
+                    {% if detail.warnings %}
+                    <div class="small text-muted mb-1">当时的告警</div>
+                    <ul class="small mb-0 ps-3">
+                        {% for w in detail.warnings %}<li>{{ w }}</li>{% endfor %}
+                    </ul>
+                    {% endif %}
+                    {% if not detail.matched and not detail.unknown and not detail.warnings %}
+                    <div class="small text-muted">
+                        没有留下判级依据（该任务可能由旧版本创建）。判级结果以
+                        <span class="vmp-tag vmp-tag-mute">{{ job.tier }}</span> 为准。
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="small text-muted mt-3 mb-1">目标主机清单（{{ job.target_count }} 台，全量列出）</div>
+            <div>
+                {% for t in job.targets %}<span class="vmp-code me-1 mb-1 d-inline-block">{{ t }}</span>{% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="vmp-card-head">
+            <h2>逐台结果</h2>
+            <span class="vmp-hint">
+                共 {{ results|length }} 条 · 点行展开输出
+                {% if job.canary %} · 灰度那台排在最前{% endif %}
+            </span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 vmp-table">
+                <thead>
+                <tr>
+                    <th style="width:150px;">主机</th>
+                    <th style="width:70px;">阶段</th>
+                    <th style="width:80px;">结果</th>
+                    <th style="width:64px;">退出码</th>
+                    <th style="width:86px;">耗时</th>
+                    <th>输出 / 原因</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for r in results %}
+                <tr class="vmp-row-click" data-vmp-toggle="#hr-{{ r.pk }}" aria-expanded="false"
+                    title="点击展开这台机器的完整输出">
+                    <td class="vmp-code">{{ r.host }}</td>
+                    <td>
+                        {% if r.phase == 'canary' %}
+                        <span class="vmp-tag vmp-tag-info">灰度</span>
+                        {% else %}<span class="vmp-tag vmp-tag-mute">全量</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if r.status == 'ok' %}<span class="vmp-tag vmp-tag-ok">成功</span>
+                        {% elif r.status == 'skipped' %}<span class="vmp-tag vmp-tag-mute">已跳过</span>
+                        {% elif r.status == 'unreachable' %}<span class="vmp-tag vmp-tag-warn">不可达</span>
+                        {% else %}<span class="vmp-tag vmp-tag-bad">失败</span>{% endif %}
+                    </td>
+                    <td class="small">{{ r.rc|default_if_none:"-" }}</td>
+                    <td class="small text-muted text-nowrap">{{ r.duration_ms }} ms</td>
+                    <td class="small">
+                        {% if r.msg %}
+                        <span class="text-truncate d-inline-block" style="max-width:420px;vertical-align:bottom;"
+                              title="{{ r.msg }}">{{ r.msg|truncatechars:120 }}</span>
+                        {% elif r.stdout %}
+                        <span class="vmp-code">{{ r.stdout|slice:":120" }}{% if r.stdout|length > 120 %}…{% endif %}</span>
+                        {% else %}
+                        <span class="text-muted">（无输出）</span>
+                        {% endif %}
+                        {% if r.truncated %}<span class="vmp-tag vmp-tag-warn ms-1">输出已截断</span>{% endif %}
+                    </td>
+                </tr>
+                <tr class="vmp-row-detail" id="hr-{{ r.pk }}" hidden>
+                    <td colspan="6">
+                        <div class="vmp-row-detail-inner">
+                            {% if r.msg %}
+                            <div class="small text-muted mb-1">ansible 消息（不可达 / 模块失败时，真正的原因在这里）</div>
+                            <pre class="vmp-code-block mb-2" style="max-height:180px;">{{ r.msg }}</pre>
+                            {% endif %}
+                            {% if r.stdout %}
+                            <div class="small text-muted mb-1">标准输出（留存 {{ r.stdout|length }} / 共 {{ r.stdout_bytes }} 字符）</div>
+                            <pre class="vmp-code-block mb-2">{{ r.stdout }}</pre>
+                            {% if r.truncated %}
+                            <div class="vmp-truncated">
+                                输出超过留存上限，中间部分已省略（头尾各留一半）。<strong>这不是完整输出</strong>，
+                                完整内容未留存；需要全文请缩小命令输出范围后重跑。
+                            </div>
+                            {% endif %}
+                            {% elif not r.msg %}
+                            <div class="small text-muted">这台机器没有返回任何标准输出。</div>
+                            {% endif %}
+                            {% if r.stderr %}
+                            <div class="small text-muted mt-2 mb-1">错误输出</div>
+                            <pre class="vmp-code-block" style="max-height:180px;">{{ r.stderr }}</pre>
+                            {% endif %}
+                            <div class="mt-2">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-copy="#hr-{{ r.pk }} .vmp-code-block">复制首段输出</button>
+                                <a class="btn btn-outline-secondary btn-sm"
+                                   href="{% url 'serverops_console' %}?os={{ job.os_type }}">拿这台机器再执行一次</a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6">
+                    {% include "resize/partials/_empty.html" with text="没有逐台结果" hint="任务可能还没跑到下发那一步（派发失败、或 ansible 输出无法解析）。请看上方的错误信息与原始输出。" %}
+                </td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="vmp-card-head" data-vmp-toggle="#rawBox" aria-expanded="false" style="cursor:pointer;">
+            <h2>ansible 原始输出</h2>
+            <span class="vmp-hint">
+                {% if job.parsed %}已成功解析出每主机结果，原文仍完整留存以备核对{% else %}
+                <strong class="text-danger">未能解析出每主机结果——下面这段原文是唯一证据</strong>{% endif %}
+                · 点击展开
+            </span>
+        </div>
+        <div class="card-body pt-0" id="rawBox" hidden>
+            {% if job.raw_output %}
+            <pre class="vmp-code-block">{{ job.raw_output }}</pre>
+            {% if job.raw_truncated %}
+            <div class="vmp-truncated">
+                原始输出超过留存上限（20 万字符），中间部分已省略。<strong>这不是完整原文。</strong>
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="small text-muted">没有留存原始输出（命令可能未下发成功）。</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="vmp-card-head">
+            <h2>控制机执行留痕</h2>
+            <a class="vmp-hint" href="{{ sys_execlog_url }}">平台全部 serverops 下发 →</a>
+        </div>
+        <div class="card-body pt-0">
+            {% if logs %}
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0 vmp-table">
+                    <thead>
+                    <tr>
+                        <th style="width:132px;">时间</th>
+                        <th style="width:80px;">退出码</th>
+                        <th style="width:80px;">结果</th>
+                        <th style="width:86px;">耗时</th>
+                        <th>备注 / 目标</th>
+                        <th style="width:80px;"></th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for row in logs %}
+                    <tr>
+                        <td class="small text-nowrap">{{ row.created_at|date:"m-d H:i:s" }}</td>
+                        <td class="small">{{ row.rc|default_if_none:"-" }}</td>
+                        <td>
+                            {% if row.status == 'success' %}<span class="vmp-tag vmp-tag-ok">成功</span>
+                            {% elif row.status == 'timeout' %}<span class="vmp-tag vmp-tag-warn">超时</span>
+                            {% else %}<span class="vmp-tag vmp-tag-bad">{{ row.get_status_display }}</span>{% endif %}
+                        </td>
+                        <td class="small text-muted text-nowrap">{{ row.duration_ms }} ms</td>
+                        <td class="small">
+                            {% if row.note %}{{ row.note|truncatechars:80 }} · {% endif %}
+                            <span class="text-muted">{{ row.target|truncatechars:60 }}</span>
+                        </td>
+                        <td><a class="btn btn-outline-secondary btn-sm py-0"
+                               href="{% url 'sys_execlog_detail' row.pk %}">留痕</a></td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="vmp-hint mt-2">
+                灰度与全量是两次独立下发，故通常有两条留痕；每条都记录了控制机上的真实退出码与耗时。
+            </div>
+            {% else %}
+            {% include "resize/partials/_empty.html" with text="没有关联的执行留痕" hint="说明命令没有真正下发到控制机（派发失败或 worker 未运行）。" %}
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    'use strict';
+    var API = "{% url 'serverops_job_api' job.pk %}";
+    var FINISHED = {% if job.finished %}true{% else %}false{% endif %};
+
+    /* 复制到剪贴板：内网浏览器版本不齐，用 textarea + execCommand 兜底，不依赖 navigator.clipboard */
+    document.addEventListener('click', function (ev) {
+        var btn = ev.target.closest('[data-copy]');
+        if (!btn) { return; }
+        var el = document.querySelector(btn.getAttribute('data-copy'));
+        if (!el) { return; }
+        var ta = document.createElement('textarea');
+        ta.value = el.textContent || '';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); window.vmpToast('已复制', 'ok', 1600); }
+        catch (e) { window.vmpToast('复制失败，请手动选中', 'bad'); }
+        document.body.removeChild(ta);
+    });
+
+    if (FINISHED) { return; }
+
+    function $(id) { return document.getElementById(id); }
+
+    /* 未完成的任务轮询汇总数字；结束后整页刷新一次拿完整逐台明细。
+       不用局部塞 HTML：逐台结果的结构复杂，前端拼一遍就多一处会和后端不一致的地方。 */
+    function poll() {
+        window.vmpFetch(API).then(function (r) { return r.json(); }).then(function (d) {
+            $('stOk').textContent = d.ok;
+            $('stFailed').textContent = d.failed;
+            $('stUnreach').textContent = d.unreachable;
+            $('stSkip').textContent = d.skipped;
+            $('stMs').textContent = d.duration_ms;
+            var tag = $('statusTag');
+            tag.textContent = d.status_label;
+            tag.className = 'vmp-tag ms-2 ' +
+                (d.status === 'success' ? 'vmp-tag-ok'
+                    : d.status === 'partial' ? 'vmp-tag-warn'
+                    : (d.status === 'pending' || d.status === 'running') ? 'vmp-tag-info'
+                    : 'vmp-tag-bad');
+            if (d.finished) {
+                var hint = $('pollHint');
+                if (hint) { hint.textContent = '已结束，正在刷新…'; }
+                setTimeout(function () { window.location.reload(); }, 800);
+                return;
+            }
+            setTimeout(poll, 3000);
+        }).catch(function () { setTimeout(poll, 6000); });
+    }
+    setTimeout(poll, 2000);
+})();
+</script>
+{% endblock %}

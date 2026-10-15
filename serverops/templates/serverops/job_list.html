@@ -1,0 +1,196 @@
+{% extends "resize/base.html" %}
+{% load static %}
+
+{% block title %}执行记录 - 服务器运维{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+    <div class="vmp-page-head">
+        <div>
+            <h1>执行记录</h1>
+            <p class="vmp-sub">
+                本模块下发过的每一次批量执行：谁发的、为什么发、发给哪些机器、判成几级、每台返回什么。
+                这里与控制台是同一份数据，改不了也删不掉——控制机侧还有一份
+                <a href="/sysmanage/execlogs/?module=serverops">执行留痕</a>互相印证。
+            </p>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'serverops_console' %}">命令控制台</a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-3">
+            <div class="vmp-stat">
+                <div class="vmp-stat-num">{{ stat_total }}</div>
+                <div class="vmp-stat-label">累计执行次数</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="vmp-stat is-bad">
+                <div class="vmp-stat-num">{{ stat_l3 }}</div>
+                <div class="vmp-stat-label">其中 L3 危险命令</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="vmp-stat is-warn">
+                <div class="vmp-stat-num">{{ stat_bad }}</div>
+                <div class="vmp-stat-label">未全部成功（失败/部分/中止）</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="vmp-stat">
+                <div class="vmp-stat-num">{{ people|length }}</div>
+                <div class="vmp-stat-label">发起过的人数</div>
+            </div>
+        </div>
+    </div>
+
+    <form method="get" class="vmp-filterbar">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-2">
+                <label class="form-label" for="f-tier">风险等级</label>
+                <select class="form-select" id="f-tier" name="tier">
+                    <option value="">全部</option>
+                    {% for v, label in tiers %}
+                    <option value="{{ v }}" {% if v == f_tier %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label" for="f-status">结果</label>
+                <select class="form-select" id="f-status" name="status">
+                    <option value="">全部</option>
+                    <option value="not_success" {% if f_status == 'not_success' %}selected{% endif %}>未全部成功</option>
+                    {% for v, label in statuses %}
+                    <option value="{{ v }}" {% if v == f_status %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label" for="f-os">目标系统</label>
+                <select class="form-select" id="f-os" name="os_type">
+                    <option value="">全部</option>
+                    <option value="windows" {% if f_os == 'windows' %}selected{% endif %}>Windows</option>
+                    <option value="linux" {% if f_os == 'linux' %}selected{% endif %}>Linux</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label" for="f-by">发起人</label>
+                <select class="form-select" id="f-by" name="created_by">
+                    <option value="">全部</option>
+                    {% for p in people %}
+                    <option value="{{ p }}" {% if p == f_by %}selected{% endif %}>{{ p }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="f-q">命令关键字</label>
+                <input class="form-control" id="f-q" name="q" value="{{ f_q }}" placeholder="如 Get-Service / systemctl">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label" for="f-start">开始日期</label>
+                <input class="form-control" type="date" id="f-start" name="start" value="{{ start }}">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label" for="f-end">结束日期</label>
+                <input class="form-control" type="date" id="f-end" name="end" value="{{ end }}">
+            </div>
+            <div class="col-12 col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">查询</button>
+                <a class="btn btn-outline-secondary btn-sm" href="{% url 'serverops_jobs' %}">重置</a>
+            </div>
+        </div>
+    </form>
+
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 vmp-table">
+                <thead>
+                <tr>
+                    <th style="width:132px;">时间</th>
+                    <th style="width:56px;">编号</th>
+                    <th style="width:60px;">等级</th>
+                    <th style="width:86px;">系统</th>
+                    <th>命令</th>
+                    <th style="width:60px;">台数</th>
+                    <th style="width:130px;">结果</th>
+                    <th style="width:96px;">发起人</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for j in page %}
+                <tr class="vmp-row-click" data-vmp-toggle="#job-{{ j.pk }}" aria-expanded="false"
+                    title="点击展开判级依据与执行原因">
+                    <td class="text-nowrap small">
+                        <a href="{% url 'serverops_job_detail' j.pk %}">{{ j.created_at|date:"m-d H:i:s" }}</a>
+                    </td>
+                    <td class="small text-muted">#{{ j.pk }}</td>
+                    <td>
+                        <span class="vmp-tag {% if j.tier == 'L1' %}vmp-tag-ok{% elif j.tier == 'L2' %}vmp-tag-warn{% else %}vmp-tag-bad{% endif %}">{{ j.tier }}</span>
+                    </td>
+                    <td class="small">{{ j.get_os_type_display }}</td>
+                    <td>
+                        <span class="vmp-code">{{ j.command|slice:":110" }}{% if j.command|length > 110 %}…{% endif %}</span>
+                        {% if j.canary %}<span class="vmp-tag vmp-tag-info ms-1">灰度</span>{% endif %}
+                    </td>
+                    <td class="small">{{ j.target_count }}</td>
+                    <td class="small">
+                        {% if j.status == 'success' %}
+                        <span class="vmp-tag vmp-tag-ok">全部成功</span>
+                        {% elif j.status == 'partial' %}
+                        <span class="vmp-tag vmp-tag-warn">部分成功</span>
+                        {% elif j.status == 'pending' or j.status == 'running' %}
+                        <span class="vmp-tag vmp-tag-info">{{ j.get_status_display }}</span>
+                        {% else %}
+                        <span class="vmp-tag vmp-tag-bad">{{ j.get_status_display }}</span>
+                        {% endif %}
+                        <div class="text-muted" style="font-size:.72rem;">
+                            成 {{ j.ok_count }} / 败 {{ j.failed_count }}
+                            {% if j.unreachable_count %} / 不可达 {{ j.unreachable_count }}{% endif %}
+                            {% if j.skipped_count %} / 跳过 {{ j.skipped_count }}{% endif %}
+                        </div>
+                    </td>
+                    <td class="small">{{ j.created_by }}</td>
+                </tr>
+                <tr class="vmp-row-detail" id="job-{{ j.pk }}" hidden>
+                    <td colspan="8">
+                        <div class="vmp-row-detail-inner">
+                            <div class="small mb-2">
+                                <span class="text-muted">执行原因：</span>
+                                {% if j.reason %}{{ j.reason }}{% else %}
+                                <span class="text-muted">未填写（L1 只读命令不要求）</span>{% endif %}
+                            </div>
+                            <div class="small mb-2">
+                                <span class="text-muted">目标主机：</span>
+                                {% for t in j.targets %}<span class="vmp-code me-1">{{ t }}</span>{% endfor %}
+                            </div>
+                            {% if j.error %}
+                            <div class="alert alert-danger py-2 px-3 small mb-2" style="white-space:pre-wrap;">{{ j.error|slice:":800" }}</div>
+                            {% endif %}
+                            <pre class="vmp-code-block mb-2" style="max-height:140px;">{{ j.command }}</pre>
+                            <div class="mt-2">
+                                <a class="btn btn-outline-secondary btn-sm" href="{% url 'serverops_job_detail' j.pk %}">查看完整详情</a>
+                                <a class="btn btn-outline-secondary btn-sm" href="?q={{ j.command|slice:":40"|urlencode }}">搜相似命令</a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        {% include "resize/partials/_empty.html" with text="没有符合条件的执行记录" hint="也可能是还没人用过命令控制台——第一次用建议先跑一条只读命令（如 Get-Service）确认链路通。" %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="card-body pt-0">
+            {% include "resize/partials/_pagination.html" with page=page %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}

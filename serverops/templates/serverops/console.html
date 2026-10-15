@@ -1,0 +1,1052 @@
+{% extends "resize/base.html" %}
+{% load static %}
+
+{% block title %}命令控制台 - 服务器运维{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+    <div class="vmp-page-head">
+        <div>
+            <h1>命令控制台</h1>
+            <p class="vmp-sub">
+                本页会往生产机发送<strong>真实命令</strong>，每条都落库留痕（谁、何时、对哪些机器、返回什么）。
+            </p>
+        </div>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'serverops_jobs' %}">执行记录</a>
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'serverops_chat_history' %}">问答历史</a>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-12 col-xl-8">
+            <form method="post" action="{% url 'serverops_run' %}" id="runForm">
+                {% csrf_token %}
+
+                {# ---------------- 1 目标 ---------------- #}
+                <div class="card mb-3">
+                    <div class="vmp-card-head">
+                        <h2>目标</h2>
+                        <span class="vmp-hint">
+                            已选 <strong id="selCount">0</strong> / {{ host_total }} 台（上限 {{ max_targets }}）·
+                            inventory <span class="vmp-code" id="invName">{{ inventory }}</span>
+                        </span>
+                    </div>
+                    <div class="card-body pt-3">
+                        <div class="row g-2 align-items-end mb-3">
+                            <div class="col-12 col-md-4">
+                                {# 这里不是控件的 label，是分组标题：用 span， #}
+                                {# 否则浏览器无障碍审计报"label 没有关联表单字段"。 #}
+                                <span class="form-label d-block">目标系统</span>
+                                <div class="btn-group w-100" role="group" aria-label="目标系统">
+                                    <input type="radio" class="btn-check" name="os_type" id="os-windows"
+                                           value="windows" autocomplete="off" {% if os_type == 'windows' %}checked{% endif %}>
+                                    <label class="btn btn-outline-primary btn-sm" for="os-windows">Windows</label>
+                                    <input type="radio" class="btn-check" name="os_type" id="os-linux"
+                                           value="linux" autocomplete="off" {% if os_type == 'linux' %}checked{% endif %}>
+                                    <label class="btn btn-outline-primary btn-sm" for="os-linux">Linux</label>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-4">
+                                <label class="form-label" for="mode">执行方式</label>
+                                <select class="form-select form-select-sm" id="mode" name="mode">
+                                    {% for v, label in modes %}
+                                    <option value="{{ v }}" data-os="{% if v == 'shell' %}linux{% else %}windows{% endif %}"
+                                            {% if v == mode %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-6 col-md-4">
+                                <label class="form-label" for="timeout_sec">整批超时</label>
+                                <select class="form-select form-select-sm" id="timeout_sec" name="timeout_sec">
+                                    {% for t in timeouts %}
+                                    <option value="{{ t }}" {% if t == timeout_sec %}selected{% endif %}>{{ t }} 秒</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        {# 主机用搜索挑选，不再铺一整张勾选表：几百台机器占着屏幕， #}
+                        {# 而人每次其实只找那么几台。点不到的机器（不在资产表里） #}
+                        {# 直接把 IP 敲进同一个框回车，和原来的"手填主机"合并成一个入口。 #}
+                        <div class="mb-2">
+                            <label class="form-label" for="hostSearch">搜索主机</label>
+                            <input class="form-control form-control-sm" id="hostSearch"
+                                   autocomplete="off" spellcheck="false"
+                                   placeholder="输入 IP / 主机名 / 部门，点结果加入；不在资产表里的 IP 直接回车">
+                            <div id="hits" hidden></div>
+                            {% if not host_total %}
+                            <div class="alert alert-warning py-2 px-3 small mt-2 mb-0">
+                                资产表里还没有已启用的主机。可以把 IP 直接敲进上面的搜索框回车添加，
+                                要长期管理请先到「防火墙 · 主机资产」登记。
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="form-label mb-0">已选主机 · 本次目标全清单</span>
+                            <button type="button" class="btn btn-link btn-sm p-0" id="btnClear">清空</button>
+                        </div>
+                        <div id="selList" style="min-height:2rem;"></div>
+                        {# 选中结果只有一个字段：空格拼接，服务端 _split_hosts 摊平。 #}
+                        <input type="hidden" id="targetsInput" name="targets"
+                               value="{{ selected|join:' ' }}">
+                        {{ hosts|json_script:"hostData" }}
+                    </div>
+                </div>
+
+                {# ---------------- 2 命令 ---------------- #}
+                <div class="card mb-3">
+                    <div class="vmp-card-head">
+                        <h2>命令</h2>
+                        <span class="vmp-hint"><span id="cmdLen">0</span> / 20000 字符</span>
+                    </div>
+                    <div class="card-body pt-3">
+                        <textarea class="form-control" id="command" name="command" rows="5"
+                                  aria-label="要远程执行的命令"
+                                  style="font-family:var(--vmp-mono);font-size:.85rem;"
+                                  spellcheck="false"
+                                  placeholder="Get-Service | Where-Object {$_.Status -ne 'Running'} | Format-Table -AutoSize">{{ draft.command|default:"" }}</textarea>
+
+                        <div class="d-flex justify-content-between align-items-center mt-3 mb-1">
+                            <span class="form-label mb-0">实际下发到控制机的完整命令</span>
+                            <button type="button" class="btn btn-link btn-sm p-0" id="btnCopyResolved">复制</button>
+                        </div>
+                        <pre class="vmp-code-block" id="resolved" style="max-height:150px;">（填了命令并选了主机后，这里显示真正执行的那一串）</pre>
+                    </div>
+                </div>
+
+                {# ---------------- 3 判级与下发 ---------------- #}
+                <div class="card mb-3">
+                    <div class="vmp-card-head">
+                        <h2>判级与下发</h2>
+                        <span class="vmp-hint">判级由服务端算，提交时会再算一遍</span>
+                    </div>
+                    <div class="card-body pt-3">
+                        <div class="mb-2">
+                            <span class="vmp-tag vmp-tag-mute" id="tierBadge" style="font-size:.9rem;padding:4px 12px;">未判级</span>
+                            <span class="small text-muted ms-2" id="tierHelp">请输入命令</span>
+                        </div>
+
+                        <div id="tierDetail" class="small mb-2"></div>
+                        <div id="tierWarn"></div>
+
+                        <div class="row g-2">
+                            <div class="col-12">
+                                <label class="form-label" for="reason">
+                                    执行原因 <span class="text-muted small" id="reasonReq">（L2 / L3 必填，进留痕）</span>
+                                </label>
+                                <input class="form-control form-control-sm" id="reason" name="reason" maxlength="200"
+                                       value="{{ draft.reason|default:'' }}"
+                                       placeholder="例如：U8 应用服务无响应，需重启后确认端口恢复">
+                            </div>
+
+                            <div class="col-12 col-md-4" id="canaryBox">
+                                <label class="form-label" for="canary">灰度主机（先试一台）</label>
+                                <select class="form-select form-select-sm" id="canary" name="canary">
+                                    <option value="">不灰度，全量下发</option>
+                                </select>
+                            </div>
+
+                            <div class="col-12 col-md-4" id="becomeBox">
+                                <span class="form-label d-block">提权</span>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="become" name="become"
+                                           {% if draft.become %}checked{% endif %}>
+                                    <label class="form-check-label" for="become">sudo（ansible -b）</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex gap-3 align-items-center mt-4 flex-wrap">
+                            <button type="submit" class="btn btn-primary" id="btnSubmit">下发执行</button>
+                            <span class="small text-muted">
+                                {{ username }}
+                                {% if admin %}
+                                <span class="vmp-tag vmp-tag-info ms-1">兼职信息化管理员</span>
+                                {% else %}
+                                <span class="vmp-tag vmp-tag-mute ms-1">普通用户 · 仅 L1</span>
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        {# ---------------- 右栏：问答 + 速查 + 最近执行 ---------------- #}
+        <div class="col-12 col-xl-4">
+
+            {% if not llm_enabled %}
+            <div class="alert alert-danger py-2 small">
+                <div class="fw-bold">大模型当前不可用</div>
+                <div>{{ llm_reason|default:"未配置或未启用。" }}</div>
+                <div class="mt-1">在「系统管理 · 配置管理」检查 <span class="vmp-code">LLM_ENABLED</span> /
+                    <span class="vmp-code">LLM_BASE_URL</span> / <span class="vmp-code">LLM_MODEL</span>。
+                    速查表与命令下发不受影响。</div>
+            </div>
+            {% endif %}
+
+            <div class="card mb-3">
+                <div class="vmp-card-head">
+                    <h2>运维问答</h2>
+                    <span class="vmp-hint">
+                        {% if llm_model %}<span class="vmp-code">{{ llm_model }}</span> · {% endif %}
+                        <a href="?new=1" id="btnNewChat">新会话</a>
+                    </span>
+                </div>
+                <div class="card-body pt-3">
+                    <div id="chatBox"
+                         style="height:min(46vh,460px);overflow:auto;border:1px solid var(--vmp-border);border-radius:var(--vmp-r-sm);padding:var(--vmp-sp-3);background:#fdfbf7;">
+                        {% for m in messages_list %}
+                        <div class="vmp-msg {% if m.role == 'user' %}is-user{% else %}is-bot{% endif %}">
+                            <div class="vmp-msg-meta">
+                                {% if m.role == 'user' %}{{ m.created_by|default:"我" }}{% else %}大模型{% endif %}
+                                · {{ m.created_at|date:"m-d H:i:s" }}
+                                {% if m.role == 'assistant' and m.latency_ms %} · {{ m.latency_ms }} ms{% endif %}
+                                {% if m.os_type %} · {{ m.os_type }}{% endif %}
+                                {% if m.host %} · <span class="vmp-code">{{ m.host }}</span>{% endif %}
+                            </div>
+                            {% if m.status == 'pending' %}
+                            <div class="vmp-msg-body" data-pending-id="{{ m.pk }}">
+                                <span class="vmp-skeleton d-inline-block" style="width:60%;">生成中</span>
+                            </div>
+                            {% elif m.status == 'failed' %}
+                            <div class="vmp-msg-body">
+                                <div class="alert alert-danger py-2 px-3 small mb-0">
+                                    回答失败：{{ m.error|default:"未知错误" }}
+                                </div>
+                            </div>
+                            {% else %}
+                            <div class="vmp-msg-body vmp-md">{{ m.content }}</div>
+                            {% endif %}
+                        </div>
+                        {% empty %}
+                        <div class="text-center text-muted small py-5" id="chatEmpty">
+                            记不住命令就用中文说要做的事，例如"这台机器最近一天有哪些错误级事件"。
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="d-flex gap-2 mt-2 align-items-end">
+                        <div style="flex:0 0 42%;">
+                            <label class="form-label mb-1 small text-muted" for="cHost">主机（可选）</label>
+                            <select class="form-select form-select-sm" id="cHost">
+                                <option value="">不指定</option>
+                                {% for h in hosts %}
+                                <option value="{{ h.ip }}">{{ h.ip }}{% if h.hostname %} · {{ h.hostname }}{% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="flex-grow-1">
+                            <label class="form-label mb-1 small text-muted" for="cInput">问题（跟随左侧"目标系统"）</label>
+                            <div class="d-flex gap-2">
+                                <textarea class="form-control form-control-sm" id="cInput" rows="2"
+                                          style="min-width:0;"
+                                          placeholder="Ctrl+Enter 发送"></textarea>
+                                {# .form-control 自带 width:100%，在 flex 行里会把按钮挤到 #}
+                                {# 只剩一个字宽，"发送"竖排成两行。按钮必须钉死不参与伸缩。 #}
+                                <button type="button" class="btn btn-primary btn-sm" id="btnSend"
+                                        style="flex:0 0 auto;"
+                                        {% if not llm_enabled %}disabled title="大模型不可用"{% endif %}>发送</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="vmp-hint mt-2">
+                        模型没有执行能力；命令要你点「填入控制台」才会进左边的命令框，判级与确认照旧走一遍。
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="vmp-card-head">
+                    <h2>常用命令速查</h2>
+                    <span class="vmp-hint">点击填入命令框</span>
+                </div>
+                <div class="card-body pt-3">
+                    <div data-recipes="windows" {% if os_type != 'windows' %}hidden{% endif %}>
+                        <div class="d-flex flex-wrap gap-1 mb-2">
+                            {% for label, cmd in recipes_win %}
+                            <button type="button" class="btn btn-outline-secondary btn-sm recipe-btn"
+                                    data-cmd="{{ cmd }}">{{ label }}</button>
+                            {% endfor %}
+                        </div>
+                        <div class="d-flex flex-wrap gap-1">
+                            {% for label, cmd, tier in recipes_change_win %}
+                            <button type="button" class="btn btn-outline-danger btn-sm recipe-btn"
+                                    data-cmd="{{ cmd }}" title="{{ cmd }}">{{ label }}
+                                <span class="vmp-tag vmp-tag-bad ms-1">{{ tier }}</span>
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div data-recipes="linux" {% if os_type == 'windows' %}hidden{% endif %}>
+                        <div class="d-flex flex-wrap gap-1 mb-2">
+                            {% for label, cmd in recipes_linux %}
+                            <button type="button" class="btn btn-outline-secondary btn-sm recipe-btn"
+                                    data-cmd="{{ cmd }}">{{ label }}</button>
+                            {% endfor %}
+                        </div>
+                        <div class="d-flex flex-wrap gap-1">
+                            {% for label, cmd, tier in recipes_change_linux %}
+                            <button type="button" class="btn btn-outline-danger btn-sm recipe-btn"
+                                    data-cmd="{{ cmd }}" title="{{ cmd }}">{{ label }}
+                                <span class="vmp-tag vmp-tag-bad ms-1">{{ tier }}</span>
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="vmp-card-head">
+                    <h2>最近执行</h2>
+                    <a class="vmp-hint" href="{% url 'serverops_jobs' %}">全部 →</a>
+                </div>
+                <div class="card-body pt-3">
+                    {% for j in recent_jobs %}
+                    <div class="d-flex justify-content-between align-items-start gap-2 py-1 border-bottom">
+                        <div class="small" style="min-width:0;">
+                            <a href="{% url 'serverops_job_detail' j.pk %}" class="vmp-code text-truncate d-inline-block"
+                               style="max-width:100%;">{{ j.command|truncatechars:48 }}</a>
+                            <div class="text-muted" style="font-size:.72rem;">
+                                {{ j.created_at|date:"m-d H:i" }} · {{ j.created_by }} ·
+                                {{ j.target_count }} 台 · 成 {{ j.ok_count }} / 败 {{ j.failed_count }}
+                            </div>
+                        </div>
+                        <span class="vmp-tag {% if j.status == 'success' %}vmp-tag-ok{% elif j.status == 'partial' %}vmp-tag-warn{% elif j.status == 'pending' or j.status == 'running' %}vmp-tag-info{% else %}vmp-tag-bad{% endif %}">
+                            {{ j.get_status_display }}
+                        </span>
+                    </div>
+                    {% empty %}
+                    <div class="small text-muted py-2">还没有执行记录。</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .vmp-msg { margin-bottom: var(--vmp-sp-3); }
+    .vmp-msg-meta { font-size: .72rem; color: var(--vmp-muted); margin-bottom: 3px; }
+    .vmp-msg.is-user .vmp-msg-meta { text-align: right; }
+    .vmp-msg-body {
+        display: inline-block; max-width: 92%;
+        padding: var(--vmp-sp-2) var(--vmp-sp-3);
+        border-radius: var(--vmp-r-sm);
+        font-size: .84rem; line-height: 1.55;
+        border: 1px solid var(--vmp-border); background: var(--vmp-surface);
+    }
+    .vmp-msg.is-user { text-align: right; }
+    .vmp-msg.is-user .vmp-msg-body {
+        background: var(--vmp-accent-soft); border-color: transparent; text-align: left;
+    }
+    .vmp-md { white-space: pre-wrap; word-break: break-word; text-align: left; }
+    .vmp-md .vmp-code-block { margin: var(--vmp-sp-2) 0; font-size: .78rem; }
+    .vmp-md-codebar { display: flex; gap: var(--vmp-sp-2); margin-bottom: var(--vmp-sp-2); }
+
+    /* ---- 主机搜索：结果贴在搜索框下方，选中后用 chip 摊在清单里 ---- */
+    #hits {
+        margin-top: 4px; max-height: 208px; overflow: auto;
+        border: 1px solid var(--vmp-border); border-radius: var(--vmp-r-sm);
+        background: #fffefb;
+    }
+    #hitsHead {
+        position: sticky; top: 0; z-index: 1;
+        display: flex; gap: var(--vmp-sp-2); align-items: center; flex-wrap: wrap;
+        padding: 4px 10px; background: var(--vmp-surface);
+        border-bottom: 1px solid var(--vmp-border);
+        font-size: .78rem; color: var(--vmp-mute);
+    }
+    .vmp-hit {
+        display: flex; gap: var(--vmp-sp-2); align-items: baseline;
+        width: 100%; padding: 5px 10px; text-align: left; cursor: pointer;
+        border: 0; border-bottom: 1px solid var(--vmp-border);
+        background: transparent; color: inherit; font: inherit; font-size: .82rem;
+    }
+    .vmp-hit:last-child { border-bottom: 0; }
+    .vmp-hit:hover, .vmp-hit:focus { background: var(--vmp-accent-soft); }
+    .vmp-hit .vmp-hit-meta { color: var(--vmp-mute); font-size: .76rem; }
+    .vmp-hit .vmp-hit-add { margin-left: auto; color: var(--vmp-accent-dark); font-size: .76rem; }
+
+    .vmp-chip {
+        display: inline-flex; align-items: center; gap: 2px;
+        margin: 0 4px 4px 0; padding: 2px 2px 2px 8px;
+        border: 1px solid var(--vmp-border); border-radius: var(--vmp-r-sm);
+        background: #fffefb; font-family: var(--vmp-mono); font-size: .78rem;
+    }
+    .vmp-chip-x {
+        border: 0; background: transparent; cursor: pointer;
+        padding: 0 4px; line-height: 1.4; color: var(--vmp-mute); font-size: .9rem;
+    }
+    .vmp-chip-x:hover, .vmp-chip-x:focus { color: var(--vmp-bad); }
+    /* 系统对不上的机器只描边，不填亮黄底：亮黄底压深字是徽章的活，chip 里塞不下。 */
+    .vmp-chip.is-other { border-color: var(--vmp-warn); border-style: dashed; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    'use strict';
+
+    var CLASSIFY_URL = "{% url 'serverops_classify' %}";
+    var LINUX_INV = "{{ linux_inventory|escapejs }}";
+    var WIN_INV = "{{ windows_inventory|escapejs }}";
+    var MAX_TARGETS = {{ max_targets }};
+    var SEND_URL = "{% url 'serverops_chat_send' %}";
+    /* 用一个不可能存在的 pk 反解出前缀，避免在 JS 里硬写 URL 路径 */
+    var POLL_URL = "{% url 'serverops_chat_poll' 987654 %}".replace('987654', '');
+    var LLM_OK = {% if llm_enabled %}true{% else %}false{% endif %};
+
+    var $ = function (id) { return document.getElementById(id); };
+    var form = $('runForm');
+    var cmdEl = $('command');
+    var modeEl = $('mode');
+    var lastCls = null;
+    var timer = null;
+    var seq = 0;
+
+    function esc(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+            return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+        });
+    }
+
+    function osType() {
+        var r = form.querySelector('input[name="os_type"]:checked');
+        return r ? r.value : 'windows';
+    }
+
+    /* ---------- 目标主机：搜索框挑，选中后摊成 chip ---------- */
+
+    var HOSTS = JSON.parse($('hostData').textContent);
+    var sel = [];
+    var HIT_CAP = 20;
+    /* 和服务端 _TARGET_RE 保持一致：手输的机器名/IP 只能是这些字符，
+       因为逗号会破坏 ansible 的 pattern 分隔、空格与引号会牵涉多层转义。 */
+    var TARGET_RE = /^[A-Za-z0-9._-]{1,64}$/;
+
+    /* 已选清单的唯一真相是 hidden 字段（草稿回填时服务端只往那里写），
+       所以进页面时从它读回来，而不是再维护第二份状态。 */
+    String($('targetsInput').value || '').split(/[\s,;]+/).forEach(function (t) {
+        t = t.trim();
+        if (t && sel.indexOf(t) < 0) { sel.push(t); }
+    });
+
+    function targets() { return sel.slice(); }
+
+    function hostOf(ip) {
+        for (var i = 0; i < HOSTS.length; i++) {
+            if (HOSTS[i].ip === ip) { return HOSTS[i]; }
+        }
+        return null;
+    }
+
+    function tag(cls, text) {
+        return '<span class="vmp-tag vmp-tag-' + cls + '">' + esc(text) + '</span>';
+    }
+
+    function osLabel(h) {
+        return h.os_guess === 'windows' ? 'Windows'
+            : (h.os_guess === 'linux' ? 'Linux' : '未识别');
+    }
+
+    /* 匹配排序：当前系统 → 认不出系统 → 系统明显不符。
+       不符的不藏起来：资产表标错是常事，人搜到了就该看见并自己判断。 */
+    function osRank(h, os) {
+        if (!h.os_guess) { return 1; }
+        return h.os_guess === os ? 0 : 2;
+    }
+
+    function matchHosts(kw) {
+        var os = osType();
+        var q = (kw || '').trim().toLowerCase();
+        var hit = HOSTS.filter(function (h) {
+            if (sel.indexOf(h.ip) >= 0) { return false; }
+            if (!q) { return true; }
+            return (h.ip + ' ' + (h.hostname || '') + ' ' + (h.department || '') + ' ' +
+                    (h.os_version || '')).toLowerCase().indexOf(q) >= 0;
+        });
+        hit.sort(function (a, b) {
+            var d = osRank(a, os) - osRank(b, os);
+            if (d) { return d; }
+            return a.ip < b.ip ? -1 : (a.ip > b.ip ? 1 : 0);
+        });
+        return hit;
+    }
+
+    function renderHits() {
+        var box = $('hits');
+        var kw = $('hostSearch').value;
+        /* 空关键词且没在输入框里就不展开：否则一开页面就摊出整台资产表，
+           和原来那张占满屏幕的勾选表没区别。 */
+        if (!(kw || '').trim() && document.activeElement !== $('hostSearch')) {
+            box.hidden = true;
+            box.innerHTML = '';
+            return;
+        }
+        var hit = matchHosts(kw);
+        var extra = '';
+        var q = (kw || '').trim();
+        /* 不在资产表里的机器：把输入当主机名/IP 直接给一条"添加"，
+           这就是原来那个"手填主机"输入框的新位置。
+           只在【一条都没匹配上】时才给——否则搜 "u8" 明明有 3 台，
+           列表里还多一条凭空捏造的 "u8"，看着像第 4 台机器。 */
+        if (q && !hit.length && !hostOf(q) && TARGET_RE.test(q)) {
+            extra = '<button type="button" class="vmp-hit" data-add="' + esc(q) + '">' +
+                    '<span class="vmp-code">' + esc(q) + '</span>' +
+                    '<span class="vmp-hit-meta">不在资产表里，直接加入</span>' +
+                    '<span class="vmp-hit-add">加入</span></button>';
+        }
+        if (!hit.length && !extra) {
+            box.hidden = true;
+            box.innerHTML = '';
+            return;
+        }
+        var rows = hit.slice(0, HIT_CAP).map(function (h) {
+            var os = osType();
+            var meta = [h.hostname || '-', h.department || '-'].join(' · ');
+            return '<button type="button" class="vmp-hit" data-add="' + esc(h.ip) + '">' +
+                   '<span class="vmp-code">' + esc(h.ip) + '</span>' +
+                   '<span class="vmp-hit-meta">' + esc(meta) + '</span>' +
+                   tag(h.os_guess === os ? 'info' : (h.os_guess ? 'warn' : 'mute'), osLabel(h)) +
+                   tag(h.is_online ? 'ok' : 'mute', h.is_online ? '在线' : '离线') +
+                   '<span class="vmp-hit-add">加入</span></button>';
+        }).join('');
+        /* 只列前 HIT_CAP 条，剩下的一定要说出数量，不能悄悄少列 */
+        var more = hit.length > HIT_CAP
+            ? '<div class="vmp-hit-meta px-2 py-1">还有 ' + (hit.length - HIT_CAP) +
+              ' 台未列出，继续输入缩小范围，或用「全部加入」。</div>'
+            : '';
+        var head = '<div id="hitsHead"><span>匹配 ' + hit.length + ' 台</span>' +
+            '<button type="button" class="btn btn-link btn-sm p-0" data-batch="all">全部加入</button>' +
+            '<button type="button" class="btn btn-link btn-sm p-0" data-batch="online">只加在线</button>' +
+            '</div>';
+        box.innerHTML = head + rows + extra + more;
+        box.hidden = false;
+    }
+
+    function syncSel() {
+        var os = osType();
+        $('targetsInput').value = sel.join(' ');
+        $('selCount').textContent = sel.length;
+        $('invName').textContent = (os === 'windows') ? WIN_INV : LINUX_INV;
+
+        /* 已选清单必须逐台列出来，不能只给一个数字——批量下发没有撤销键。 */
+        var box = $('selList');
+        var mismatch = 0;
+        var html = sel.map(function (ip) {
+            var h = hostOf(ip);
+            var other = !!(h && h.os_guess && h.os_guess !== os);
+            if (other) { mismatch += 1; }
+            var tip = h ? [osLabel(h), h.hostname || '-', h.department || '-',
+                           h.is_online ? '在线' : '离线'].join(' / ')
+                        : '不在资产表里（手输主机）';
+            return '<span class="vmp-chip' + (other ? ' is-other' : '') + '" title="' +
+                   esc(other ? '系统类型与当前选择不符：' + tip : tip) + '">' + esc(ip) +
+                   '<button type="button" class="vmp-chip-x" data-del="' + esc(ip) +
+                   '" aria-label="移除 ' + esc(ip) + '">×</button></span>';
+        }).join('');
+        if (!sel.length) {
+            html = '<span class="text-muted">尚未选择主机。在上面的搜索框里挑，或直接敲 IP 回车。</span>';
+        }
+        /* chip 全量渲染，一条都不省：批量下发前必须看得见到底是哪几台。 */
+        box.innerHTML = html;
+
+        var can = $('canary');
+        var keep = can.value;
+        can.innerHTML = '<option value="">不灰度，全量下发</option>';
+        sel.forEach(function (ip) {
+            var o = document.createElement('option');
+            o.value = ip; o.textContent = ip;
+            can.appendChild(o);
+        });
+        if (sel.indexOf(keep) >= 0) { can.value = keep; }
+
+        var note = '';
+        if (mismatch) {
+            note += '<div class="mt-1">' + tag('warn', mismatch + ' 台资产系统类型与当前选择不同') + '</div>';
+        }
+        if (sel.length > MAX_TARGETS) {
+            note += '<div class="mt-1">' + tag('bad', '超过单次上限 ' + MAX_TARGETS + ' 台，请分批下发') + '</div>';
+        }
+        box.innerHTML += note;
+    }
+
+    function addHost(ip, quiet) {
+        ip = (ip || '').trim();
+        if (!ip) { return false; }
+        if (sel.indexOf(ip) >= 0) {
+            if (!quiet) { window.vmpToast(ip + ' 已经在清单里', 'info', 1400); }
+            return false;
+        }
+        if (sel.length >= MAX_TARGETS) {
+            if (!quiet) {
+                window.vmpToast('已达单次上限 ' + MAX_TARGETS + ' 台，先删掉几台或分批下发', 'bad');
+            }
+            return false;
+        }
+        sel.push(ip);
+        return true;
+    }
+
+    function batchAdd(onlineOnly) {
+        var hit = matchHosts($('hostSearch').value);
+        if (onlineOnly) { hit = hit.filter(function (h) { return h.is_online; }); }
+        var added = 0, skipped = 0;
+        hit.forEach(function (h) {
+            if (addHost(h.ip, true)) { added += 1; } else { skipped += 1; }
+        });
+        syncSel(); renderHits(); scheduleClassify();
+        $('hostSearch').focus();
+        if (!added) {
+            window.vmpToast(onlineOnly ? '没有在线主机可加入' : '没有可加入的主机', 'warn');
+        } else if (skipped) {
+            window.vmpToast('加入 ' + added + ' 台，另有 ' + skipped +
+                ' 台未加入（已在清单里或超出上限 ' + MAX_TARGETS + ' 台）', 'warn');
+        } else {
+            window.vmpToast('加入 ' + added + ' 台', 'ok', 1600);
+        }
+    }
+
+    /* ---------- 系统切换 ---------- */
+
+    function switchOs() {
+        var os = osType();
+        document.querySelectorAll('[data-recipes]').forEach(function (el) {
+            el.hidden = (el.getAttribute('data-recipes') !== os);
+        });
+        Array.prototype.slice.call(modeEl.options).forEach(function (o) {
+            var want = o.getAttribute('data-os');
+            o.hidden = (want !== os);
+            o.disabled = (want !== os);
+        });
+        if (os === 'linux') {
+            modeEl.value = 'shell';
+            $('become').disabled = false;
+        } else {
+            if (modeEl.value === 'shell') { modeEl.value = 'powershell'; }
+            /* Windows 勾了 become 服务端会直接拒；这里先禁用，省一次来回 */
+            $('become').checked = false;
+            $('become').disabled = true;
+        }
+        syncSel();
+        renderHits();
+        classify();
+    }
+
+    /* ---------- 实时判级 ---------- */
+
+    function tierClass(tier) {
+        return tier === 'L1' ? 'vmp-tag-ok' : (tier === 'L2' ? 'vmp-tag-warn' : 'vmp-tag-bad');
+    }
+
+    function renderCls(res) {
+        lastCls = res;
+        var badge = $('tierBadge');
+        badge.className = 'vmp-tag ' + (res.tier ? tierClass(res.tier) : 'vmp-tag-mute');
+        badge.style.fontSize = '.9rem';
+        badge.style.padding = '4px 12px';
+        badge.textContent = res.tier ? (res.tier + ' · ' + res.label) : '未判级';
+        $('tierHelp').textContent = res.help || '';
+
+        /* 判级依据留在页面上：只给一个等级数字，用户没法判断它判错了没 */
+        var html = '';
+        if (res.matched && res.matched.length) {
+            html += res.matched.map(function (m) {
+                return '<span class="vmp-tag ' + tierClass(m.tier) + ' me-1">' + esc(m.tier) +
+                       ' ' + esc(m.label) + '</span>';
+            }).join('');
+        }
+        if (res.unknown && res.unknown.length) {
+            html += '<div class="mt-1"><span class="text-muted">认不出的命令段（按 L2 处理）：</span>' +
+                res.unknown.map(function (u) {
+                    return '<span class="vmp-code me-1">' + esc(u) + '</span>';
+                }).join('') + '</div>';
+        }
+        $('tierDetail').innerHTML = html;
+
+        var warn = '';
+        (res.warnings || []).forEach(function (w) {
+            warn += '<div class="alert alert-warning py-2 px-3 small mb-2">' + esc(w) + '</div>';
+        });
+        if (!res.allowed) {
+            warn += '<div class="alert alert-danger py-2 px-3 small mb-2">' +
+                    '这条判定为 <strong>' + esc(res.tier) + '</strong>，需要"兼职信息化管理员"角色，' +
+                    '当前账号提交会被拒绝。</div>';
+        }
+        $('tierWarn').innerHTML = warn;
+
+        /* 原因 / 提权的可用性随判级变 */
+        var needReason = !!res.needs_reason;
+        $('reason').required = needReason;
+        $('reasonReq').textContent = needReason
+            ? '（必填：这条会进留痕，事后追溯全靠它）'
+            : '（L2 / L3 必填，进留痕）';
+
+        $('resolved').textContent = res.resolved_command ||
+            '（填了命令并选了主机后，这里显示真正执行的那一串）';
+    }
+
+    function classify() {
+        var cmd = (cmdEl.value || '').trim();
+        if (!cmd) {
+            seq += 1;
+            renderCls({tier: '', label: '', help: '请输入命令', matched: [],
+                       unknown: [], warnings: [], allowed: true, needs_reason: false,
+                       resolved_command: ''});
+            return;
+        }
+        var body = {
+            command: cmd,
+            targets: targets(),
+            os_type: osType(),
+            mode: modeEl.value,
+            become: $('become').checked
+        };
+        /* 序号防止乱序回填：边打字边判级时，慢的旧响应后到会覆盖新结果，
+           那样页面上显示的等级就不是当前命令的等级——这比不显示更糟。 */
+        var my = ++seq;
+        window.vmpFetch(CLASSIFY_URL, {method: 'POST', body: JSON.stringify(body)})
+            .then(function (r) { return r.json(); })
+            .then(function (res) { if (my === seq) { renderCls(res); } })
+            .catch(function (e) {
+                if (my !== seq) { return; }
+                $('tierHelp').textContent = '判级请求失败：' + e + '（提交时服务端会再判一次）';
+            });
+    }
+
+    function scheduleClassify() {
+        clearTimeout(timer);
+        timer = setTimeout(classify, 350);
+    }
+
+    /* 命令进左侧命令框。问答与控制台合到同一页之后这是纯前端动作，不再跳页。 */
+    function fillConsole(code, wantOs) {
+        if (wantOs && wantOs !== osType()) {
+            var radio = form.querySelector('input[name="os_type"][value="' + wantOs + '"]');
+            if (radio) { radio.checked = true; }
+            switchOs();
+        }
+        cmdEl.value = code;
+        $('cmdLen').textContent = code.length;
+        classify();
+        cmdEl.scrollIntoView({behavior: 'smooth', block: 'center'});
+        cmdEl.focus();
+    }
+
+    /* ---------- 事件绑定 ---------- */
+
+    cmdEl.addEventListener('input', function () {
+        $('cmdLen').textContent = (cmdEl.value || '').length;
+        scheduleClassify();
+    });
+    /* 搜索挑主机：结果行用 mousedown 而不是 click——点下去时输入框先 blur，
+       列表在那一刻已经被收起来，click 根本等不到。 */
+    var searchEl = $('hostSearch');
+    searchEl.addEventListener('input', renderHits);
+    searchEl.addEventListener('focus', renderHits);
+    searchEl.addEventListener('blur', function () { $('hits').hidden = true; });
+    searchEl.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape') { $('hits').hidden = true; return; }
+        if (ev.key !== 'Enter') { return; }
+        ev.preventDefault();
+        var q = (searchEl.value || '').trim();
+        /* 回车优先给"能直接加的那台"：有精确 IP 就加它，否则加匹配列表的第一条；
+           输入本身像个合法主机名且资产表里没有时，按手填主机加入。 */
+        if (q && !hostOf(q) && TARGET_RE.test(q) && !matchHosts(q).length) {
+            if (addHost(q)) { afterAdd(q); }
+            return;
+        }
+        var first = matchHosts(q)[0];
+        if (!first) { window.vmpToast('没有匹配的主机', 'warn'); return; }
+        if (addHost(first.ip)) { afterAdd(first.ip); }
+    });
+
+    function afterAdd(ip) {
+        syncSel(); renderHits(); scheduleClassify();
+        searchEl.focus();
+        var h = hostOf(ip);
+        if (!h) { window.vmpToast('已加入 ' + ip + '（不在资产表，无法确认系统类型）', 'warn', 2400); }
+    }
+
+    $('hits').addEventListener('mousedown', function (ev) {
+        var b = ev.target.closest ? ev.target.closest('[data-add],[data-batch]') : null;
+        if (!b) { return; }
+        ev.preventDefault();
+        if (b.getAttribute('data-batch')) {
+            batchAdd(b.getAttribute('data-batch') === 'online');
+            return;
+        }
+        var ip = b.getAttribute('data-add');
+        if (addHost(ip)) { afterAdd(ip); }
+    });
+
+    $('selList').addEventListener('click', function (ev) {
+        var b = ev.target.closest ? ev.target.closest('[data-del]') : null;
+        if (!b) { return; }
+        var ip = b.getAttribute('data-del');
+        sel = sel.filter(function (t) { return t !== ip; });
+        syncSel(); renderHits(); scheduleClassify();
+    });
+
+    form.querySelectorAll('input[name="os_type"]').forEach(function (r) {
+        r.addEventListener('change', switchOs);
+    });
+    modeEl.addEventListener('change', classify);
+    $('become').addEventListener('change', classify);
+
+    $('btnClear').addEventListener('click', function () {
+        sel = [];
+        syncSel(); renderHits(); scheduleClassify();
+        $('hostSearch').focus();
+    });
+
+    document.querySelectorAll('.recipe-btn').forEach(function (b) {
+        b.addEventListener('click', function () {
+            fillConsole(b.getAttribute('data-cmd') || '');
+            window.vmpToast('已填入命令', 'info', 1600);
+        });
+    });
+
+    $('btnCopyResolved').addEventListener('click', function () {
+        var t = $('resolved').textContent || '';
+        if (!t || t.charAt(0) === '（') { window.vmpToast('还没有可复制的命令', 'warn'); return; }
+        var ta = document.createElement('textarea');
+        ta.value = t; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); window.vmpToast('已复制', 'ok', 1600); }
+        catch (e) { window.vmpToast('复制失败，请手动选中', 'bad'); }
+        document.body.removeChild(ta);
+    });
+
+    $('btnNewChat').addEventListener('click', function (ev) {
+        if (!window.confirm('开启新会话？当前会话不再带入上下文（历史仍可在「问答历史」查）。')) {
+            ev.preventDefault();
+        }
+    });
+
+    /* 提交前最后一道人工确认：把"真实命令 + 全量主机"摊在眼前。
+       这不是安全机制（安全机制在服务端），是防手滑——批量下发没有撤销键。 */
+    form.addEventListener('submit', function (ev) {
+        var list = targets();
+        var cmd = (cmdEl.value || '').trim();
+        if (!cmd) { ev.preventDefault(); window.vmpToast('命令不能为空', 'bad'); return; }
+        if (!list.length) { ev.preventDefault(); window.vmpToast('请至少选择一台目标主机', 'bad'); return; }
+        if (list.length > MAX_TARGETS) {
+            ev.preventDefault();
+            window.vmpToast('超过单次上限 ' + MAX_TARGETS + ' 台', 'bad');
+            return;
+        }
+        var tier = (lastCls && lastCls.tier) || '?';
+        var lines = [
+            '判级：' + tier + ((lastCls && lastCls.label) ? ('（' + lastCls.label + '）') : ''),
+            '系统：' + osType() + ' / ' + modeEl.value,
+            '主机：' + list.length + ' 台 → ' + list.slice(0, 12).join(', ') +
+                (list.length > 12 ? (' …等 ' + list.length + ' 台') : ''),
+            '灰度：' + ($('canary').value || '无（直接全量）'),
+            '',
+            '命令：',
+            cmd.slice(0, 600) + (cmd.length > 600 ? '\n…（已省略 ' + (cmd.length - 600) + ' 字符）' : ''),
+            '',
+            '确认下发？执行后无法撤销，全过程会留痕。'
+        ];
+        if (tier === 'L3') {
+            lines.splice(0, 0, '【危险命令】可能造成数据丢失或服务中断。');
+        }
+        if (!window.confirm(lines.join('\n'))) { ev.preventDefault(); }
+    });
+
+    /* ============================================================
+       运维问答
+       ============================================================ */
+
+    var chatBox = $('chatBox');
+    var input = $('cInput');
+    var sending = false;
+
+    /* ---------- 极简 Markdown 渲染 ----------
+       只处理三样：``` 代码块、**加粗**、`行内代码`。其余一律当纯文本转义输出。
+       不引第三方 markdown 库：内网离线装不了，而且模型输出的任何字符都不能
+       变成可执行 HTML——渲染器只认这三种结构，其余全部转义。 */
+    function inline(s) {
+        return esc(s)
+            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/`([^`]+)`/g, '<span class="vmp-code">$1</span>');
+    }
+
+    function renderMd(el) {
+        if (el.getAttribute('data-md-done') === '1') { return; }
+        var raw = el.textContent || '';
+        var parts = raw.split('```');
+        var html = '';
+        for (var i = 0; i < parts.length; i++) {
+            if (i % 2 === 0) {
+                var prose = parts[i].replace(/^\n+|\n+$/g, '');
+                if (prose) { html += '<div>' + inline(prose) + '</div>'; }
+                continue;
+            }
+            var seg = parts[i];
+            var nl = seg.indexOf('\n');
+            var body = (nl < 0) ? seg : seg.slice(nl + 1);
+            body = body.replace(/\n+$/, '');
+            if (!body) { continue; }
+            html += '<div class="vmp-md-codebar">' +
+                    '<button type="button" class="btn btn-outline-secondary btn-sm py-0" data-copycode>复制</button>' +
+                    '<button type="button" class="btn btn-outline-primary btn-sm py-0" data-fillcode>填入控制台</button>' +
+                    '</div>' +
+                    '<pre class="vmp-code-block">' + esc(body) + '</pre>';
+        }
+        el.innerHTML = html || '<span class="text-muted">（模型返回了空内容）</span>';
+        el.setAttribute('data-md-done', '1');
+    }
+
+    function scrollBottom() { chatBox.scrollTop = chatBox.scrollHeight; }
+
+    chatBox.addEventListener('click', function (ev) {
+        var btn = ev.target.closest('[data-copycode],[data-fillcode]');
+        if (!btn) { return; }
+        /* 一段回答里可能有多个代码块：按按钮所在工具条的下标找它对应的那一个 */
+        var body = btn.closest('.vmp-msg-body');
+        var bar = btn.closest('.vmp-md-codebar');
+        var bars = body.querySelectorAll('.vmp-md-codebar');
+        var pres = body.querySelectorAll('pre.vmp-code-block');
+        var pre = null;
+        for (var i = 0; i < bars.length; i++) {
+            if (bars[i] === bar) { pre = pres[i]; break; }
+        }
+        if (!pre) { return; }
+        var code = pre.textContent || '';
+        if (btn.hasAttribute('data-copycode')) {
+            var ta = document.createElement('textarea');
+            ta.value = code; document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy'); window.vmpToast('已复制命令', 'ok', 1600); }
+            catch (e) { window.vmpToast('复制失败，请手动选中', 'bad'); }
+            document.body.removeChild(ta);
+            return;
+        }
+        fillConsole(code, osType());
+        window.vmpToast('已填入命令。模型没有执行能力，请核对判级与主机后再下发。', 'warn', 6000);
+    });
+
+    function addUser(text) {
+        var empty = $('chatEmpty');
+        if (empty && empty.parentNode) { empty.parentNode.removeChild(empty); }
+        var d = document.createElement('div');
+        d.className = 'vmp-msg is-user';
+        d.innerHTML = '<div class="vmp-msg-meta">我 · 刚刚</div>' +
+                      '<div class="vmp-msg-body vmp-md">' + esc(text) + '</div>';
+        chatBox.appendChild(d);
+        renderMd(d.querySelector('.vmp-md'));
+        scrollBottom();
+    }
+
+    function addPending() {
+        var d = document.createElement('div');
+        d.className = 'vmp-msg is-bot';
+        d.innerHTML = '<div class="vmp-msg-meta">大模型 · 思考中</div>' +
+                      '<div class="vmp-msg-body"><span class="vmp-skeleton d-block" style="width:70%;height:1em;"></span>' +
+                      '<span class="vmp-skeleton d-block mt-1" style="width:45%;height:1em;"></span></div>';
+        chatBox.appendChild(d);
+        scrollBottom();
+        return d;
+    }
+
+    function fillAnswer(node, d) {
+        var meta = node.querySelector('.vmp-msg-meta');
+        meta.textContent = '大模型' + (d.model ? (' · ' + d.model) : '') +
+                           (d.latency_ms ? (' · ' + (d.latency_ms / 1000).toFixed(1) + ' 秒') : '');
+        var body = node.querySelector('.vmp-msg-body');
+        body.className = 'vmp-msg-body vmp-md';
+        if (d.status === 'failed' || d.error) {
+            body.innerHTML = '<div class="alert alert-danger py-2 px-3 small mb-0">回答失败：' +
+                             esc(d.error || '未知错误') + '</div>';
+            body.setAttribute('data-md-done', '1');
+            return;
+        }
+        body.textContent = d.content || '';
+        renderMd(body);
+        scrollBottom();
+    }
+
+    function poll(id, node, tries) {
+        tries = tries || 0;
+        window.vmpFetch(POLL_URL + id + '/')
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.finished) { fillAnswer(node, d); sending = false; $('btnSend').disabled = !LLM_OK; return; }
+                /* 思考型模型 10~60 秒；轮询上限给到 5 分钟，超时后不再假装还在等 */
+                if (tries > 150) {
+                    fillAnswer(node, {status: 'failed',
+                        error: '等待超过 5 分钟仍无结果。模型服务可能不可用，请到「配置管理」测试连通性。'});
+                    sending = false; $('btnSend').disabled = !LLM_OK;
+                    return;
+                }
+                setTimeout(function () { poll(id, node, tries + 1); }, 2000);
+            })
+            .catch(function () {
+                setTimeout(function () { poll(id, node, tries + 1); }, 5000);
+            });
+    }
+
+    document.querySelectorAll('.vmp-md').forEach(renderMd);
+    scrollBottom();
+
+    /* 刷新页面时若上一条还在生成，继续轮询，别让答案永远卡在骨架屏上 */
+    document.querySelectorAll('[data-pending-id]').forEach(function (el) {
+        var id = el.getAttribute('data-pending-id');
+        var node = el.closest('.vmp-msg');
+        el.removeAttribute('data-pending-id');
+        sending = true;
+        $('btnSend').disabled = true;
+        poll(id, node, 0);
+    });
+
+    function send() {
+        var text = (input.value || '').trim();
+        if (!text) { window.vmpToast('请先输入问题', 'warn'); return; }
+        if (sending) { window.vmpToast('上一条还在生成中，请稍候', 'warn'); return; }
+        if (text.length > 8000) { window.vmpToast('问题过长（上限 8000 字符）', 'bad'); return; }
+
+        sending = true;
+        $('btnSend').disabled = true;
+        addUser(text);
+        input.value = '';
+        var node = addPending();
+
+        window.vmpFetch(SEND_URL, {
+            method: 'POST',
+            body: JSON.stringify({content: text, os_type: osType(), host: $('cHost').value})
+        }).then(function (r) { return r.json().then(function (d) { return {status: r.status, data: d}; }); })
+          .then(function (res) {
+              if (!res.data.ok) {
+                  fillAnswer(node, {status: 'failed', error: res.data.error || ('HTTP ' + res.status)});
+                  sending = false; $('btnSend').disabled = !LLM_OK;
+                  window.vmpToast(res.data.error || '发送失败', 'bad');
+                  return;
+              }
+              poll(res.data.id, node, 0);
+          })
+          .catch(function (e) {
+              fillAnswer(node, {status: 'failed', error: '请求异常：' + e});
+              sending = false; $('btnSend').disabled = !LLM_OK;
+          });
+    }
+
+    $('btnSend').addEventListener('click', send);
+    input.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); send(); }
+    });
+
+    /* ---------- 初始化 ---------- */
+    $('cmdLen').textContent = (cmdEl.value || '').length;
+    switchOs();
+})();
+</script>
+{% endblock %}
