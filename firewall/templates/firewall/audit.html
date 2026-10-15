@@ -3,13 +3,22 @@
 {% block title %}防火墙审计日志 - 信息系统运维平台{% endblock %}
 
 {% block content %}
-<h3 class="fw-bold mb-3" style="color: var(--vmp-ink);">防火墙审计日志</h3>
+<div class="container-fluid py-4 vmp-fade-in">
 
-<div class="card mb-3">
-    <div class="card-body py-3">
+    <div class="vmp-page-head">
+        <div>
+            <h1>防火墙审计日志</h1>
+            <p class="vmp-sub">
+                主机同步、重新采集、开关防火墙、策略审批与下发都在这里留痕，每行可回指对应的 Ansible 任务号。
+                命令级的原始输出见 <a href="{% url 'sys_execlogs' %}?module=firewall">执行留痕</a>。
+            </p>
+        </div>
+    </div>
+
+    <div class="vmp-filterbar">
         <form method="get" class="row g-2 align-items-end">
             <div class="col-md-3">
-                <label class="form-label small mb-1">操作类型</label>
+                <label class="form-label">操作类型</label>
                 <select name="action" class="form-select">
                     <option value="">全部</option>
                     {% for a in actions %}
@@ -18,52 +27,52 @@
                 </select>
             </div>
             <div class="col-md-4">
-                <label class="form-label small mb-1">关键字</label>
+                <label class="form-label">关键字</label>
                 <input type="text" name="q" value="{{ f_q }}" class="form-control" placeholder="操作人 / 对象">
             </div>
             <div class="col-md-3">
-                <button type="submit" class="btn btn-primary rounded-pill px-4">筛选</button>
-                <a href="{% url 'fw_audit' %}" class="btn btn-outline-secondary rounded-pill px-3">重置</a>
+                <button type="submit" class="btn btn-primary">筛选</button>
+                <a href="{% url 'fw_audit' %}" class="btn btn-outline-secondary">重置</a>
             </div>
         </form>
     </div>
-</div>
 
-<div class="card">
-    <div class="card-body p-0">
-        <table class="table table-sm table-hover mb-0">
-            <thead class="table-warm">
-                <tr>
-                    <th>时间</th><th>操作人</th><th>动作</th><th>主机</th><th>对象</th>
-                    <th>结果</th><th>Ansible 任务</th><th>详情</th>
-                </tr>
-            </thead>
-            <tbody>
-            {% for log in page_obj %}
-                <tr>
-                    <td class="small text-muted text-nowrap">{{ log.created_at|date:'m-d H:i:s' }}</td>
-                    <td>{{ log.username }}</td>
-                    <td><span class="badge bg-secondary">{{ log.action }}</span></td>
-                    <td class="small">
-                        {% if log.host %}
-                        <a href="{% url 'fw_host_detail' log.host_id %}">{{ log.host.hostname }}</a>
-                        {% else %}-{% endif %}
-                    </td>
-                    <td class="small" style="max-width:200px; word-break:break-all;">{{ log.object_repr|default:'-' }}</td>
-                    <td>
-                        {% if log.result == 'success' %}<span class="badge bg-success">成功</span>
-                        {% else %}<span class="badge bg-danger">失败</span>{% endif %}
-                    </td>
-                    <td class="small text-muted">{{ log.ansible_task_ref|default:'-'|truncatechars:8 }}</td>
-                    <td class="small text-muted" style="max-width:220px; word-break:break-all;">{{ log.detail|default:'-'|truncatechars:60 }}</td>
-                </tr>
-            {% empty %}
-                <tr><td colspan="8" class="empty-state">暂无审计日志</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
+    <div class="card">
+        <div class="card-body p-0 table-responsive">
+            <table class="table table-sm table-hover mb-0 vmp-table">
+                <thead>
+                    <tr>
+                        <th>时间</th><th>操作人</th><th>动作</th><th>主机</th><th>对象</th>
+                        <th>结果</th><th>Ansible 任务</th><th>详情</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for log in page_obj %}
+                    <tr>
+                        <td class="small text-muted text-nowrap">{{ log.created_at|date:'m-d H:i:s' }}</td>
+                        <td>{{ log.username }}</td>
+                        <td><span class="vmp-tag vmp-tag-mute">{{ log.action }}</span></td>
+                        <td class="small">
+                            {% if log.host %}
+                            <a href="{% url 'fw_host_detail' log.host_id %}">{{ log.host.hostname }}</a>
+                            {% else %}-{% endif %}
+                        </td>
+                        <td class="small" style="max-width:200px; word-break:break-all;">{{ log.object_repr|default:'-' }}</td>
+                        <td>
+                            {% if log.result == 'success' %}<span class="vmp-tag vmp-tag-ok">成功</span>
+                            {% else %}<span class="vmp-tag vmp-tag-bad">失败</span>{% endif %}
+                        </td>
+                        <td class="small text-muted">{{ log.ansible_task_ref|default:'-'|truncatechars:8 }}</td>
+                        <td class="small text-muted" style="max-width:220px; word-break:break-all;">{{ log.detail|default:'-'|truncatechars:60 }}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="8" class="empty-state">暂无审计日志</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
-</div>
 
-{% include "firewall/_pager.html" %}
+    {% include "resize/partials/_pagination.html" with page=page_obj %}
+</div>
 {% endblock %}

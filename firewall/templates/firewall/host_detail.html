@@ -3,215 +3,266 @@
 {% block title %}{{ host.hostname }} - 防火墙主机详情{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="fw-bold mb-0" style="color: var(--vmp-ink);">
-        {{ host.hostname }} <small class="text-muted fs-6">{{ host.ip }}</small>
-    </h3>
-    <a href="{% url 'fw_hosts' %}" class="btn btn-outline-secondary rounded-pill px-3">返回列表</a>
-</div>
+<div class="container-fluid py-4 vmp-fade-in">
 
-<!-- 操作按钮组 -->
-<div class="card mb-3">
-    <div class="card-body py-3 d-flex flex-wrap gap-2 align-items-center">
-        <form method="post" action="{% url 'fw_host_firewall' host.id 'enable' %}" class="mb-0">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-success rounded-pill px-4"
-                    onclick="return confirm('确定开启该主机的防火墙（全部 Profile）吗？');">
-                开启防火墙
-            </button>
-        </form>
-        {% if is_admin %}
-        <form method="post" action="{% url 'fw_host_firewall' host.id 'disable' %}" class="mb-0">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-danger rounded-pill px-4"
-                    onclick="return confirm('危险操作：确定关闭该主机的防火墙吗？');">
-                关闭防火墙
-            </button>
-        </form>
-        {% endif %}
-        <form method="post" action="{% url 'fw_host_collect' host.id %}" class="mb-0">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-outline-primary rounded-pill px-4">重新采集</button>
-        </form>
-        <a href="{% url 'fw_request_new' %}?host={{ host.id }}" class="btn btn-primary rounded-pill px-4">创建规则申请</a>
+    <div class="vmp-page-head">
+        <div>
+            <h1>{{ host.hostname }} <small class="text-muted fs-6">{{ host.ip }}</small></h1>
+            <p class="vmp-sub">
+                这台机的防火墙开关状态、Profile 明细、当前规则与近期阻断事件。
+                规则来自每 30 分钟一次的采集，页面读的是库里最后一次成功采集的结果。
+            </p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{% url 'fw_hosts' %}" class="btn btn-sm btn-outline-secondary">返回列表</a>
+        </div>
     </div>
-</div>
 
-<div class="row">
-    <!-- 基本信息 -->
-    <div class="col-lg-4 mb-4">
-        <div class="card h-100">
-            <div class="card-header fw-bold">基本信息</div>
-            <div class="card-body">
-                <dl class="dl-group row mb-0">
-                    <dt class="col-5">主机名</dt><dd class="col-7">{{ host.hostname }}</dd>
-                    <dt class="col-5">IP</dt><dd class="col-7">{{ host.ip }}</dd>
-                    <dt class="col-5">操作系统</dt><dd class="col-7">{{ host.os_version|default:'-' }}</dd>
-                    <dt class="col-5">部门</dt><dd class="col-7">{{ host.department|default:'-' }}</dd>
-                    <dt class="col-5">Ansible 分组</dt><dd class="col-7">{{ host.ansible_group }}</dd>
-                    <dt class="col-5">防火墙状态</dt>
-                    <dd class="col-7">
-                        {% if host.firewall_status == 'on' %}
-                            <span class="badge bg-success">已开启</span>
-                        {% elif host.firewall_status == 'off' %}
-                            <span class="badge bg-danger">已关闭</span>
-                        {% elif host.firewall_status == 'partial' %}
-                            <span class="badge bg-warning text-dark">部分开启</span>
-                        {% else %}
-                            <span class="badge bg-secondary">未知</span>
-                        {% endif %}
-                    </dd>
-                    <dt class="col-5">在线状态</dt>
-                    <dd class="col-7">
-                        {% if host.is_online %}<span class="badge bg-success">在线</span>
-                        {% else %}<span class="badge bg-secondary">离线</span>{% endif %}
-                    </dd>
-                    <dt class="col-5">最近采集</dt>
-                    <dd class="col-7">{{ host.last_collection_time|date:'Y-m-d H:i:s'|default:'从未采集' }}</dd>
-                    <dt class="col-5">Ansible 状态</dt>
-                    <dd class="col-7">{{ host.last_ansible_status|default:'-' }}</dd>
-                    <dt class="col-5">纳入管理</dt>
-                    <dd class="col-7">{% if host.enabled %}是{% else %}<span class="badge bg-secondary">否</span>{% endif %}</dd>
-                </dl>
-                {% if host.profiles_detail.profiles %}
-                <div class="dl-group-title mt-3">Profile 详情</div>
-                <table class="table table-sm mb-0">
-                    <thead class="table-warm"><tr><th>Profile</th><th>启用</th><th>默认入站</th><th>默认出站</th></tr></thead>
-                    <tbody>
-                    {% for pname, p in host.profiles_detail.profiles.items %}
-                        <tr>
-                            <td>{{ pname }}</td>
-                            <td>{% if p.enabled %}<span class="badge bg-success">是</span>{% else %}<span class="badge bg-danger">否</span>{% endif %}</td>
-                            <td>{{ p.default_inbound|default:'-' }}</td>
-                            <td>{{ p.default_outbound|default:'-' }}</td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-                {% endif %}
+    <!-- 操作按钮组 -->
+    <div class="card mb-3">
+        <div class="vmp-card-head">
+            <h2>操作</h2>
+            <span class="vmp-hint">关闭防火墙仅管理员可见；下列动作都会写入审计日志</span>
+        </div>
+        <div class="card-body py-3 d-flex flex-wrap gap-2 align-items-center">
+            <form method="post" action="{% url 'fw_host_firewall' host.id 'enable' %}" class="mb-0">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-success"
+                        onclick="return confirm('确定开启该主机的防火墙（全部 Profile）吗？');">
+                    开启防火墙
+                </button>
+            </form>
+            {% if is_admin %}
+            <form method="post" action="{% url 'fw_host_firewall' host.id 'disable' %}" class="mb-0">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-danger"
+                        onclick="return confirm('危险操作：确定关闭该主机的防火墙吗？');">
+                    关闭防火墙
+                </button>
+            </form>
+            {% endif %}
+            <form method="post" action="{% url 'fw_host_collect' host.id %}" class="mb-0">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-secondary">重新采集</button>
+            </form>
+            <a href="{% url 'fw_request_new' %}?host={{ host.id }}" class="btn btn-primary">创建规则申请</a>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- 基本信息 -->
+        <div class="col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="vmp-card-head">
+                    <h2>基本信息</h2>
+                    <span class="vmp-hint">{{ host.ansible_group }}</span>
+                </div>
+                <div class="card-body">
+                    <dl class="dl-group row mb-0">
+                        <dt class="col-5">主机名</dt><dd class="col-7">{{ host.hostname }}</dd>
+                        <dt class="col-5">IP</dt><dd class="col-7">{{ host.ip }}</dd>
+                        <dt class="col-5">操作系统</dt><dd class="col-7">{{ host.os_version|default:'-' }}</dd>
+                        <dt class="col-5">部门</dt><dd class="col-7">{{ host.department|default:'-' }}</dd>
+                        <dt class="col-5">Ansible 分组</dt><dd class="col-7">{{ host.ansible_group }}</dd>
+                        <dt class="col-5">防火墙状态</dt>
+                        <dd class="col-7">
+                            {% if host.firewall_status == 'on' %}
+                                <span class="vmp-tag vmp-tag-ok">已开启</span>
+                            {% elif host.firewall_status == 'off' %}
+                                <span class="vmp-tag vmp-tag-bad">已关闭</span>
+                            {% elif host.firewall_status == 'partial' %}
+                                <span class="vmp-tag vmp-tag-warn">部分开启</span>
+                            {% else %}
+                                <span class="vmp-tag vmp-tag-mute">未知</span>
+                            {% endif %}
+                        </dd>
+                        <dt class="col-5">在线状态</dt>
+                        <dd class="col-7">
+                            {% if host.is_online %}<span class="vmp-tag vmp-tag-ok">在线</span>
+                            {% else %}<span class="vmp-tag vmp-tag-mute">离线</span>{% endif %}
+                        </dd>
+                        <dt class="col-5">最近采集</dt>
+                        <dd class="col-7">{{ host.last_collection_time|date:'Y-m-d H:i:s'|default:'从未采集' }}</dd>
+                        <dt class="col-5">Ansible 状态</dt>
+                        <dd class="col-7">{{ host.last_ansible_status|default:'-' }}</dd>
+                        <dt class="col-5">纳入管理</dt>
+                        <dd class="col-7">{% if host.enabled %}是{% else %}<span class="vmp-tag vmp-tag-mute">否</span>{% endif %}</dd>
+                    </dl>
+                    {% if host.profiles_detail.profiles %}
+                    <div class="dl-group-title mt-3">Profile 详情</div>
+                    <table class="table table-sm mb-0 vmp-table">
+                        <thead><tr><th>Profile</th><th>启用</th><th>默认入站</th><th>默认出站</th></tr></thead>
+                        <tbody>
+                        {% for pname, p in host.profiles_detail.profiles.items %}
+                            <tr>
+                                <td>{{ pname }}</td>
+                                <td>{% if p.enabled %}<span class="vmp-tag vmp-tag-ok">是</span>{% else %}<span class="vmp-tag vmp-tag-bad">否</span>{% endif %}</td>
+                                <td>{{ p.default_inbound|default:'-' }}</td>
+                                <td>{{ p.default_outbound|default:'-' }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    {% endif %}
+                    {% if host.profiles_detail.fwlog %}
+                    {% with fw=host.profiles_detail.fwlog %}
+                    <div class="dl-group-title mt-3">日志采集进度</div>
+                    <dl class="dl-group row mb-0">
+                        <dt class="col-5">最近采集</dt>
+                        <dd class="col-7">{{ fw.collected_at|default:'-' }} · 追了 {{ fw.rounds }} 轮 · 得 {{ fw.events_returned }} 条</dd>
+                        <dt class="col-5">读取偏移</dt>
+                        <dd class="col-7"><span class="vmp-code">{{ fw.offset }}</span></dd>
+                        <dt class="col-5">是否采完</dt>
+                        <dd class="col-7">
+                            {% if fw.truncated %}
+                            <span class="vmp-tag vmp-tag-warn">未采完，剩 {{ fw.skipped_bytes }} 字节</span>
+                            {% elif fw.partial_tail %}
+                            <span class="vmp-tag vmp-tag-mute">尾行未写完，已扣住等下轮</span>
+                            {% else %}
+                            <span class="vmp-tag vmp-tag-ok">已采到文件尾</span>
+                            {% endif %}
+                            {% if fw.oversized_skipped %}
+                            <span class="vmp-tag vmp-tag-bad">跳过了异常内容块</span>
+                            {% endif %}
+                        </dd>
+                    </dl>
+                    <p class="vmp-hint mt-2 mb-0">
+                        「未采完」不是故障：偏移只推进到真正读过的最后一行，剩下的下轮接着采，事件不会丢。
+                        但连续多轮都显示未采完，说明这台机的日志量超过单轮上限，需要调大 max_lines。
+                    </p>
+                    {% endwith %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 阻断事件 -->
+        <div class="col-lg-8 mb-4">
+            <div class="card h-100">
+                <div class="vmp-card-head">
+                    <h2>近期阻断事件（DROP，最近 20 条）</h2>
+                    <span class="vmp-hint">取自防火墙日志，为空不代表没有拦截，也可能是日志未开启</span>
+                </div>
+                <div class="card-body p-0 table-responsive">
+                    <table class="table table-sm table-hover mb-0 vmp-table">
+                        <thead>
+                            <tr><th>时间</th><th>协议</th><th>源</th><th>目标</th><th>进程</th></tr>
+                        </thead>
+                        <tbody>
+                        {% for ev in drop_events %}
+                            <tr>
+                                <td class="small text-muted">{{ ev.timestamp|date:'m-d H:i:s' }}</td>
+                                <td>{{ ev.protocol }}</td>
+                                <td class="small">{{ ev.src_ip }}{% if ev.src_port %}:{{ ev.src_port }}{% endif %}</td>
+                                <td class="small">{{ ev.dst_ip }}{% if ev.dst_port %}:{{ ev.dst_port }}{% endif %}</td>
+                                <td class="small text-muted">{{ ev.process_name|default:'-' }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="5" class="empty-state py-3">暂无阻断事件</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- 阻断事件 -->
-    <div class="col-lg-8 mb-4">
-        <div class="card h-100">
-            <div class="card-header fw-bold">近期阻断事件（DROP，最近 20 条）</div>
-            <div class="card-body p-0">
-                <table class="table table-sm table-hover mb-0">
-                    <thead class="table-warm">
-                        <tr><th>时间</th><th>协议</th><th>源</th><th>目标</th><th>进程</th></tr>
-                    </thead>
-                    <tbody>
-                    {% for ev in drop_events %}
-                        <tr>
-                            <td class="small text-muted">{{ ev.timestamp|date:'m-d H:i:s' }}</td>
-                            <td>{{ ev.protocol }}</td>
-                            <td class="small">{{ ev.src_ip }}{% if ev.src_port %}:{{ ev.src_port }}{% endif %}</td>
-                            <td class="small">{{ ev.dst_ip }}{% if ev.dst_port %}:{{ ev.dst_port }}{% endif %}</td>
-                            <td class="small text-muted">{{ ev.process_name|default:'-' }}</td>
-                        </tr>
-                    {% empty %}
-                        <tr><td colspan="5" class="empty-state py-3">暂无阻断事件</td></tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+    <!-- 回收候选规则 -->
+    {% if recycle_candidates %}
+    <div class="card mb-4 border-warning">
+        <div class="vmp-card-head is-warn">
+            <h2>回收候选规则</h2>
+            <span class="vmp-hint">长期未命中 / 临时规则已到期，共 {{ recycle_candidates|length }} 条</span>
+        </div>
+        <div class="card-body p-0 table-responsive">
+            <table class="table table-sm table-hover mb-0 vmp-table">
+                <thead>
+                    <tr><th>规则名</th><th>方向</th><th>程序</th><th>远程地址</th><th>端口</th><th>命中</th><th>最近命中</th><th>操作</th></tr>
+                </thead>
+                <tbody>
+                {% for rule in recycle_candidates %}
+                    <tr>
+                        <td class="small">{{ rule.rule_name }}</td>
+                        <td>{{ rule.direction }}</td>
+                        <td class="small text-muted">{{ rule.program|default:'Any' }}</td>
+                        <td class="small">{{ rule.remote_address }}</td>
+                        <td>{{ rule.remote_port|default:'Any' }}</td>
+                        <td>{{ rule.hit_count }}</td>
+                        <td class="small text-muted">{{ rule.last_hit_time|date:'m-d H:i'|default:'从未' }}</td>
+                        <td>
+                            {% if is_admin %}
+                            <form method="post" action="{% url 'fw_rule_remove' rule.id %}" class="d-inline">
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{% url 'fw_host_detail' host.id %}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger"
+                                        onclick="return confirm('确定回收（删除）该规则吗？');">回收</button>
+                            </form>
+                            {% else %}
+                            <span class="text-muted small">待管理员处理</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
-</div>
+    {% endif %}
 
-<!-- 回收候选规则 -->
-{% if recycle_candidates %}
-<div class="card mb-4 border-warning">
-    <div class="card-header fw-bold text-warning-emphasis">
-        回收候选规则（长期未命中 / 临时规则已到期，共 {{ recycle_candidates|length }} 条）
-    </div>
-    <div class="card-body p-0">
-        <table class="table table-sm table-hover mb-0">
-            <thead class="table-warm">
-                <tr><th>规则名</th><th>方向</th><th>程序</th><th>远程地址</th><th>端口</th><th>命中</th><th>最近命中</th><th>操作</th></tr>
-            </thead>
-            <tbody>
-            {% for rule in recycle_candidates %}
-                <tr>
-                    <td class="small">{{ rule.rule_name }}</td>
-                    <td>{{ rule.direction }}</td>
-                    <td class="small text-muted">{{ rule.program|default:'Any' }}</td>
-                    <td class="small">{{ rule.remote_address }}</td>
-                    <td>{{ rule.remote_port|default:'Any' }}</td>
-                    <td>{{ rule.hit_count }}</td>
-                    <td class="small text-muted">{{ rule.last_hit_time|date:'m-d H:i'|default:'从未' }}</td>
-                    <td>
-                        {% if is_admin %}
-                        <form method="post" action="{% url 'fw_rule_remove' rule.id %}" class="d-inline">
-                            {% csrf_token %}
-                            <input type="hidden" name="next" value="{% url 'fw_host_detail' host.id %}">
-                            <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill"
-                                    onclick="return confirm('确定回收（删除）该规则吗？');">回收</button>
-                        </form>
-                        {% else %}
-                        <span class="text-muted small">待管理员处理</span>
-                        {% endif %}
-                    </td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-{% endif %}
-
-<!-- 当前规则 -->
-<div class="card mb-4">
-    <div class="card-header fw-bold">当前规则（{{ rules|length }} 条）</div>
-    <div class="card-body p-0">
-        <table class="table table-sm table-hover mb-0">
-            <thead class="table-warm">
-                <tr>
-                    <th>规则名</th><th>显示名</th><th>方向</th><th>动作</th><th>协议</th>
-                    <th>程序</th><th>远程地址</th><th>端口</th><th>来源</th><th>状态</th><th>风险</th>
-                </tr>
-            </thead>
-            <tbody>
-            {% for rule in rules %}
-                <tr>
-                    <td class="small">{{ rule.rule_name }}</td>
-                    <td class="small">{{ rule.display_name|default:'-' }}</td>
-                    <td>{{ rule.direction }}</td>
-                    <td>
-                        {% if rule.action == 'Allow' %}<span class="badge bg-success">Allow</span>
-                        {% else %}<span class="badge bg-danger">Block</span>{% endif %}
-                    </td>
-                    <td>{{ rule.protocol }}</td>
-                    <td class="small text-muted" style="max-width:180px; word-break:break-all;">{{ rule.program|default:'Any' }}</td>
-                    <td class="small">{{ rule.remote_address }}</td>
-                    <td>{{ rule.remote_port|default:'Any' }}</td>
-                    <td>
-                        {% if rule.source == 'auto' %}<span class="badge bg-info text-dark">自动</span>
-                        {% elif rule.source == 'request' %}<span class="badge bg-primary">申请</span>
-                        {% elif rule.source == 'manual' %}<span class="badge bg-warning text-dark">人工</span>
-                        {% else %}<span class="badge bg-secondary">采集</span>{% endif %}
-                    </td>
-                    <td>
-                        {% if rule.status == 'active' %}<span class="badge bg-success">生效中</span>
-                        {% elif rule.status == 'pending_deploy' %}<span class="badge bg-warning text-dark">待下发</span>
-                        {% elif rule.status == 'deploy_failed' %}<span class="badge bg-danger">下发失败</span>
-                        {% elif rule.status == 'recycle_candidate' %}<span class="badge bg-warning text-dark">待回收</span>
-                        {% elif rule.status == 'recycled' %}<span class="badge bg-secondary">已回收</span>
-                        {% else %}<span class="badge bg-secondary">{{ rule.status }}</span>{% endif %}
-                    </td>
-                    <td>
-                        {% if rule.risk_level == 'high' %}<span class="badge bg-danger">高</span>
-                        {% elif rule.risk_level == 'medium' %}<span class="badge bg-warning text-dark">中</span>
-                        {% else %}<span class="badge bg-success">低</span>{% endif %}
-                    </td>
-                </tr>
-            {% empty %}
-                <tr><td colspan="11" class="empty-state">暂无规则，可点击"重新采集"同步主机现有规则</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
+    <!-- 当前规则 -->
+    <div class="card mb-4">
+        <div class="vmp-card-head">
+            <h2>当前规则（{{ rules|length }} 条）</h2>
+            <span class="vmp-hint">主机上实际存在的规则，含非本系统下发的</span>
+        </div>
+        <div class="card-body p-0 table-responsive">
+            <table class="table table-sm table-hover mb-0 vmp-table">
+                <thead>
+                    <tr>
+                        <th>规则名</th><th>显示名</th><th>方向</th><th>动作</th><th>协议</th>
+                        <th>程序</th><th>远程地址</th><th>端口</th><th>来源</th><th>状态</th><th>风险</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for rule in rules %}
+                    <tr>
+                        <td class="small">{{ rule.rule_name }}</td>
+                        <td class="small">{{ rule.display_name|default:'-' }}</td>
+                        <td>{{ rule.direction }}</td>
+                        <td>
+                            {% if rule.action == 'Allow' %}<span class="vmp-tag vmp-tag-ok">Allow</span>
+                            {% else %}<span class="vmp-tag vmp-tag-bad">Block</span>{% endif %}
+                        </td>
+                        <td>{{ rule.protocol }}</td>
+                        <td class="small text-muted" style="max-width:180px; word-break:break-all;">{{ rule.program|default:'Any' }}</td>
+                        <td class="small">{{ rule.remote_address }}</td>
+                        <td>{{ rule.remote_port|default:'Any' }}</td>
+                        <td>
+                            {% if rule.source == 'auto' %}<span class="vmp-tag vmp-tag-info">自动</span>
+                            {% elif rule.source == 'request' %}<span class="vmp-tag vmp-tag-accent">申请</span>
+                            {% elif rule.source == 'manual' %}<span class="vmp-tag vmp-tag-warn">人工</span>
+                            {% else %}<span class="vmp-tag vmp-tag-mute">采集</span>{% endif %}
+                        </td>
+                        <td>
+                            {% if rule.status == 'active' %}<span class="vmp-tag vmp-tag-ok">生效中</span>
+                            {% elif rule.status == 'pending_deploy' %}<span class="vmp-tag vmp-tag-warn">待下发</span>
+                            {% elif rule.status == 'deploy_failed' %}<span class="vmp-tag vmp-tag-bad">下发失败</span>
+                            {% elif rule.status == 'recycle_candidate' %}<span class="vmp-tag vmp-tag-warn">待回收</span>
+                            {% elif rule.status == 'recycled' %}<span class="vmp-tag vmp-tag-mute">已回收</span>
+                            {% else %}<span class="vmp-tag vmp-tag-mute">{{ rule.status }}</span>{% endif %}
+                        </td>
+                        <td>
+                            {% if rule.risk_level == 'high' %}<span class="vmp-tag vmp-tag-bad">高</span>
+                            {% elif rule.risk_level == 'medium' %}<span class="vmp-tag vmp-tag-warn">中</span>
+                            {% else %}<span class="vmp-tag vmp-tag-ok">低</span>{% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="11" class="empty-state">暂无规则，可点击"重新采集"同步主机现有规则</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 {% endblock %}

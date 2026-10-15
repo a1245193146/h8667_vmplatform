@@ -3,81 +3,76 @@
 {% block title %}变更记录 - 运维平台{% endblock %}
 
 {% block content %}
-<div class="card shadow-sm">
-    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
-        <h4 class="mb-0 text-primary fw-bold">变更记录</h4>
-        <a href="{% url 'change_submit' %}" class="btn btn-primary btn-sm rounded-pill px-3">+ 新建变更</a>
+<div class="container-fluid py-4 vmp-fade-in">
+
+    <div class="vmp-page-head">
+        <div>
+            <h1>变更记录</h1>
+            <p class="vmp-sub">
+                全员可见的变更登记台账，不按申请人过滤。级别由系统按变更类型自动判定、审批默认同意，
+                本页只读，登记新记录请到「变更申请」页。
+            </p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{% url 'change_submit' %}" class="btn btn-sm btn-primary px-3">+ 新建变更</a>
+        </div>
     </div>
-    <div class="card-body p-0 table-responsive">
-        <table class="table table-striped table-hover mb-0 align-middle">
-            <thead class="table-light">
-                <tr>
-                    <th>序号</th>
-                    <th>实施时间</th>
-                    <th>操作人</th>
-                    <th>操作服务器IP</th>
-                    <th>变更类型</th>
-                    <th>级别</th>
-                    <th>变更原因</th>
-                    <th>可能影响范围</th>
-                    <th>回退方案</th>
-                    <th>审批</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for t in tasks %}
-                <tr>
-                    <td class="fw-medium">{{ t.serial_no }}</td>
-                    <td class="text-muted small text-nowrap">{{ t.implement_time|date:'Y-m-d H:i' }}</td>
-                    <td>{{ t.applicant }}</td>
-                    <td><span class="text-truncate d-inline-block" style="max-width: 160px;" title="{{ t.server_ip }}">{{ t.server_ip }}</span></td>
-                    <td>{{ t.get_change_type_display }}</td>
-                    <td>
-                        {% if t.level == 'major' %}
-                            <span class="badge bg-danger px-2 py-1">重大变更</span>
-                        {% elif t.level == 'normal' %}
-                            <span class="badge bg-warning text-dark px-2 py-1">一般变更</span>
-                        {% else %}
-                            <span class="badge bg-secondary px-2 py-1">日常操作</span>
-                        {% endif %}
-                    </td>
-                    <td><span class="text-truncate d-inline-block" style="max-width: 200px;" title="{{ t.reason }}">{{ t.reason }}</span></td>
-                    <td><span class="text-truncate d-inline-block" style="max-width: 180px;" title="{{ t.impact_scope }}">{{ t.impact_scope }}</span></td>
-                    <td><span class="text-truncate d-inline-block" style="max-width: 180px;" title="{{ t.rollback_plan }}">{{ t.rollback_plan }}</span></td>
-                    <td><span class="badge bg-success px-2 py-1">已同意</span></td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="10" class="text-center py-5 text-muted">暂无变更记录</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+
+    <div class="card">
+        <div class="vmp-card-head">
+            <h2>变更台账</h2>
+            <span class="vmp-hint">共 {{ tasks.paginator.count }} 条；变更原因、影响范围、回退方案三列有截断，悬停看全文</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0 align-middle vmp-table">
+                    <thead>
+                        <tr>
+                            <th>序号</th>
+                            <th>实施时间</th>
+                            <th>操作人</th>
+                            <th>操作服务器IP</th>
+                            <th>变更类型</th>
+                            <th>级别</th>
+                            <th>变更原因</th>
+                            <th>可能影响范围</th>
+                            <th>回退方案</th>
+                            <th>审批</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in tasks %}
+                        <tr>
+                            <td class="fw-medium text-nowrap">{{ t.serial_no }}</td>
+                            <td class="text-muted small text-nowrap">{{ t.implement_time|date:'Y-m-d H:i' }}</td>
+                            <td>{{ t.applicant }}</td>
+                            <td><span class="vmp-code text-truncate d-inline-block" style="max-width: 160px;" title="{{ t.server_ip }}">{{ t.server_ip }}</span></td>
+                            <td class="small">{{ t.get_change_type_display }}</td>
+                            <td>
+                                {% if t.level == 'major' %}
+                                    <span class="vmp-tag vmp-tag-bad">重大变更</span>
+                                {% elif t.level == 'normal' %}
+                                    <span class="vmp-tag vmp-tag-warn">一般变更</span>
+                                {% else %}
+                                    <span class="vmp-tag vmp-tag-mute">日常操作</span>
+                                {% endif %}
+                            </td>
+                            <td class="small"><span class="text-truncate d-inline-block" style="max-width: 200px;" title="{{ t.reason }}">{{ t.reason }}</span></td>
+                            <td class="small"><span class="text-truncate d-inline-block" style="max-width: 180px;" title="{{ t.impact_scope }}">{{ t.impact_scope }}</span></td>
+                            <td class="small"><span class="text-truncate d-inline-block" style="max-width: 180px;" title="{{ t.rollback_plan }}">{{ t.rollback_plan }}</span></td>
+                            <td><span class="vmp-tag vmp-tag-ok">已同意</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="10">{% include "resize/partials/_empty.html" with text="暂无变更记录" hint="登记后全员可在本页查到，提交即记录、不触发任何自动化执行" %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
-    {% if tasks.paginator.num_pages > 1 %}
-    <div class="card-footer bg-transparent border-top-0 py-3">
-        <nav aria-label="变更记录分页">
-            <ul class="pagination justify-content-center mb-0">
-                {% if tasks.has_previous %}
-                <li class="page-item">
-                    <a class="page-link" href="?page={{ tasks.previous_page_number }}">上一页</a>
-                </li>
-                {% else %}
-                <li class="page-item disabled"><span class="page-link">上一页</span></li>
-                {% endif %}
-                <li class="page-item disabled">
-                    <span class="page-link">第 {{ tasks.number }} / {{ tasks.paginator.num_pages }} 页</span>
-                </li>
-                {% if tasks.has_next %}
-                <li class="page-item">
-                    <a class="page-link" href="?page={{ tasks.next_page_number }}">下一页</a>
-                </li>
-                {% else %}
-                <li class="page-item disabled"><span class="page-link">下一页</span></li>
-                {% endif %}
-            </ul>
-        </nav>
-    </div>
-    {% endif %}
+
+    {% include "resize/partials/_pagination.html" with page=tasks %}
 </div>
 {% endblock %}

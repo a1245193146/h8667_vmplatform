@@ -7,6 +7,7 @@
     {% load static %}
     <link href="{% static 'resize/css/bootstrap.min.css' %}" rel="stylesheet">
     <link href="{% static 'resize/css/custom.css' %}" rel="stylesheet">
+    {% block extra_css %}{% endblock %}
     <style>
         /* 下拉菜单延续低饱和暖色主题 */
         .navbar-warm .dropdown-menu {
@@ -25,7 +26,7 @@
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-light navbar-warm mb-4">
-        <div class="container">
+        <div class="container-fluid">
             <a class="navbar-brand" href="{% url 'index' %}"><span class="brand-dot"></span>信息系统运维平台</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -38,7 +39,7 @@
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             磁盘扩容
                             {% if is_admin and pending_count and pending_count > 0 %}
-                            <span class="badge bg-danger rounded-pill">{{ pending_count }}</span>
+                            <span class="vmp-tag vmp-tag-bad">{{ pending_count }}</span>
                             {% endif %}
                         </a>
                         <ul class="dropdown-menu shadow">
@@ -50,7 +51,7 @@
                                 <a class="dropdown-item" href="{% url 'admin_pending' %}">
                                     审批管理
                                     {% if pending_count and pending_count > 0 %}
-                                    <span class="badge bg-danger rounded-pill">{{ pending_count }}</span>
+                                    <span class="vmp-tag vmp-tag-bad">{{ pending_count }}</span>
                                     {% endif %}
                                 </a>
                             </li>
@@ -62,7 +63,7 @@
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             域名管理
                             {% if is_admin and domain_pending_count and domain_pending_count > 0 %}
-                            <span class="badge bg-warning text-dark rounded-pill">{{ domain_pending_count }}</span>
+                            <span class="vmp-tag vmp-tag-warn">{{ domain_pending_count }}</span>
                             {% endif %}
                         </a>
                         <ul class="dropdown-menu shadow">
@@ -74,7 +75,7 @@
                                 <a class="dropdown-item" href="{% url 'domain_admin_pending' %}">
                                     域名审批
                                     {% if domain_pending_count and domain_pending_count > 0 %}
-                                    <span class="badge bg-warning text-dark rounded-pill">{{ domain_pending_count }}</span>
+                                    <span class="vmp-tag vmp-tag-warn">{{ domain_pending_count }}</span>
                                     {% endif %}
                                 </a>
                             </li>
@@ -114,6 +115,48 @@
                             <li><a class="dropdown-item" href="{% url 'fw_tasks' %}">Ansible任务</a></li>
                         </ul>
                     </li>
+                    <!-- 病毒检测与隔离 -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">病毒检测与隔离</a>
+                        <ul class="dropdown-menu shadow">
+                            <li><a class="dropdown-item" href="{% url 'av_dashboard' %}">看板</a></li>
+                            <li><a class="dropdown-item" href="{% url 'av_detections' %}">检测事件</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'av_audit' %}">审计日志</a></li>
+                            <li><a class="dropdown-item" href="{% url 'av_tasks' %}">Ansible任务</a></li>
+                        </ul>
+                    </li>
+                    <!-- 运维分析 -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">运维分析</a>
+                        <ul class="dropdown-menu shadow">
+                            <li><a class="dropdown-item" href="{% url 'ops_index' %}">分析首页</a></li>
+                            <li><a class="dropdown-item" href="{% url 'ops_impact_form' %}">服务器操作影响分析</a></li>
+                            <li><a class="dropdown-item" href="{% url 'ops_troubleshoot_form' %}">服务故障辅助排查</a></li>
+                            <li><a class="dropdown-item" href="{% url 'ops_services' %}">服务关联登记</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'ops_tasks' %}">分析任务</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            {# 服务器运维按需求挂在"运维分析"下，但用分隔线+小标题隔开： #}
+                            {# 上面几项全程只读，下面这两项【会往生产机下发变更命令】， #}
+                            {# 混在一起会让人误以为整个菜单都是只读的。 #}
+                            {# 运维问答（大模型）已经并进控制台右侧，不再单列一项。 #}
+                            <li><h6 class="dropdown-header">服务器运维 · 会下发变更命令</h6></li>
+                            <li><a class="dropdown-item" href="{% url 'serverops_console' %}">命令控制台（含运维问答）</a></li>
+                            <li><a class="dropdown-item" href="{% url 'serverops_jobs' %}">执行记录</a></li>
+                        </ul>
+                    </li>
+                    <!-- 系统管理 -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">系统管理</a>
+                        <ul class="dropdown-menu shadow">
+                            <li><a class="dropdown-item" href="{% url 'sys_index' %}">管理首页</a></li>
+                            <li><a class="dropdown-item" href="{% url 'sys_execlogs' %}">执行留痕</a></li>
+                            <li><a class="dropdown-item" href="{% url 'sys_config' %}">配置管理</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'sys_config_audit' %}">配置审计</a></li>
+                        </ul>
+                    </li>
                 </ul>
                 <ul class="navbar-nav">
                     {% if is_authenticated %}
@@ -128,7 +171,7 @@
                                 <strong>{{ sso_username }}</strong>
                             </li>
                             {% if is_admin %}
-                            <li><span class="dropdown-item-text"><span class="badge bg-warning text-dark">管理员</span></span></li>
+                            <li><span class="dropdown-item-text"><span class="vmp-tag vmp-tag-warn">管理员</span></span></li>
                             {% endif %}
                             <li><hr class="dropdown-divider"></li>
                             <li>
@@ -149,26 +192,29 @@
         </div>
     </nav>
 
-    <main class="container">
+    <main>
         {% if messages %}
+        <div class="container-fluid pt-3">
             {% for message in messages %}
-                <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show shadow-sm">
+                <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show vmp-fade-in mb-2">
                     {{ message }}
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
             {% endfor %}
+        </div>
         {% endif %}
 
         {% block content %}{% endblock %}
     </main>
 
     <footer class="footer-warm text-center py-3 mt-5">
-        <div class="container small">
+        <div class="container-fluid small">
             信息系统运维平台 v3.0 · 内网虚拟化运维
         </div>
     </footer>
 
     <script src="{% static 'resize/js/bootstrap.bundle.min.js' %}"></script>
+    <script src="{% static 'resize/js/vmp.js' %}"></script>
     <script>
         function doLogout() {
             if (!confirm('确定要退出登录吗？')) return;

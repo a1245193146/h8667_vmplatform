@@ -3,20 +3,30 @@
 {% block title %}防火墙规则 - 信息系统运维平台{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="fw-bold mb-0" style="color: var(--vmp-ink);">防火墙规则</h3>
-    <a href="{% url 'fw_request_new' %}" class="btn btn-primary rounded-pill px-4">新建策略申请</a>
-</div>
+<div class="container-fluid py-4 vmp-fade-in">
 
-<div class="card mb-3">
-    <div class="card-body py-3">
+    <div class="vmp-page-head">
+        <div>
+            <h1>防火墙规则</h1>
+            <p class="vmp-sub">
+                主机上实际的规则清单，来源分自动采集 / 策略申请 / 人工添加。
+                长期零命中或已到期的临时规则会被标为「待回收」；删除只对本系统生成的
+                <span class="vmp-code">AUTO-ITOPS-</span> 规则生效，不会动主机上原有的规则。
+            </p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{% url 'fw_request_new' %}" class="btn btn-sm btn-primary">新建策略申请</a>
+        </div>
+    </div>
+
+    <div class="vmp-filterbar">
         <form method="get" class="row g-2 align-items-end">
             <div class="col-md-3">
-                <label class="form-label small mb-1">关键字</label>
+                <label class="form-label">关键字</label>
                 <input type="text" name="q" value="{{ f_q }}" class="form-control" placeholder="规则名 / 程序 / 主机">
             </div>
             <div class="col-md-2">
-                <label class="form-label small mb-1">状态</label>
+                <label class="form-label">状态</label>
                 <select name="status" class="form-select">
                     <option value="">全部</option>
                     {% for val, label in status_choices %}
@@ -25,7 +35,7 @@
                 </select>
             </div>
             <div class="col-md-2">
-                <label class="form-label small mb-1">来源</label>
+                <label class="form-label">来源</label>
                 <select name="source" class="form-select">
                     <option value="">全部</option>
                     {% for val, label in source_choices %}
@@ -34,7 +44,7 @@
                 </select>
             </div>
             <div class="col-md-2">
-                <label class="form-label small mb-1">风险</label>
+                <label class="form-label">风险</label>
                 <select name="risk" class="form-select">
                     <option value="">全部</option>
                     {% for val, label in risk_choices %}
@@ -43,85 +53,85 @@
                 </select>
             </div>
             <div class="col-md-3">
-                <button type="submit" class="btn btn-primary rounded-pill px-4">筛选</button>
-                <a href="{% url 'fw_rules' %}" class="btn btn-outline-secondary rounded-pill px-3">重置</a>
+                <button type="submit" class="btn btn-outline-secondary">筛选</button>
+                <a href="{% url 'fw_rules' %}" class="btn btn-outline-secondary">重置</a>
             </div>
         </form>
     </div>
-</div>
 
-<div class="card">
-    <div class="card-body p-0">
-        <table class="table table-sm table-hover mb-0">
-            <thead class="table-warm">
-                <tr>
-                    <th>主机</th><th>规则名</th><th>方向</th><th>动作</th><th>协议</th>
-                    <th>程序</th><th>远程地址</th><th>端口</th><th>来源</th><th>状态</th>
-                    <th>风险</th><th>命中</th><th>到期</th>
-                    {% if is_admin %}<th>操作</th>{% endif %}
-                </tr>
-            </thead>
-            <tbody>
-            {% for rule in page_obj %}
-                <tr>
-                    <td class="small">
-                        <a href="{% url 'fw_host_detail' rule.host_id %}">{{ rule.host.hostname }}</a>
-                    </td>
-                    <td class="small" style="max-width:200px; word-break:break-all;">{{ rule.rule_name }}</td>
-                    <td>{{ rule.direction }}</td>
-                    <td>
-                        {% if rule.action == 'Allow' %}<span class="badge bg-success">Allow</span>
-                        {% else %}<span class="badge bg-danger">Block</span>{% endif %}
-                    </td>
-                    <td>{{ rule.protocol }}</td>
-                    <td class="small text-muted" style="max-width:160px; word-break:break-all;">{{ rule.program|default:'Any' }}</td>
-                    <td class="small">{{ rule.remote_address }}</td>
-                    <td>{{ rule.remote_port|default:'Any' }}</td>
-                    <td>
-                        {% if rule.source == 'auto' %}<span class="badge bg-info text-dark">自动</span>
-                        {% elif rule.source == 'request' %}<span class="badge bg-primary">申请</span>
-                        {% elif rule.source == 'manual' %}<span class="badge bg-warning text-dark">人工</span>
-                        {% else %}<span class="badge bg-secondary">采集</span>{% endif %}
-                    </td>
-                    <td>
-                        {% if rule.status == 'active' %}<span class="badge bg-success">生效中</span>
-                        {% elif rule.status == 'pending_deploy' %}<span class="badge bg-warning text-dark">待下发</span>
-                        {% elif rule.status == 'deploy_failed' %}<span class="badge bg-danger">下发失败</span>
-                        {% elif rule.status == 'recycle_candidate' %}<span class="badge bg-warning text-dark">待回收</span>
-                        {% elif rule.status == 'recycled' %}<span class="badge bg-secondary">已回收</span>
-                        {% else %}<span class="badge bg-secondary">已删除</span>{% endif %}
-                    </td>
-                    <td>
-                        {% if rule.risk_level == 'high' %}<span class="badge bg-danger">高</span>
-                        {% elif rule.risk_level == 'medium' %}<span class="badge bg-warning text-dark">中</span>
-                        {% else %}<span class="badge bg-success">低</span>{% endif %}
-                    </td>
-                    <td>{{ rule.hit_count }}</td>
-                    <td class="small text-muted">{{ rule.expire_at|date:'m-d H:i'|default:'-' }}</td>
-                    {% if is_admin %}
-                    <td class="text-nowrap">
-                        {% if rule.status != 'deleted' %}
-                        <form method="post" action="{% url 'fw_rule_remove' rule.id %}" class="d-inline">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill"
-                                    onclick="return confirm('确定删除该规则吗？（仅本系统 AUTO-ITOPS- 规则可删）');">删除</button>
-                        </form>
-                        <form method="post" action="{% url 'fw_rule_rollback' rule.id %}" class="d-inline">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-sm btn-outline-warning rounded-pill"
-                                    onclick="return confirm('确定回滚该规则吗？');">回滚</button>
-                        </form>
+    <div class="card">
+        <div class="card-body p-0 table-responsive">
+            <table class="table table-sm table-hover mb-0 vmp-table">
+                <thead>
+                    <tr>
+                        <th>主机</th><th>规则名</th><th>方向</th><th>动作</th><th>协议</th>
+                        <th>程序</th><th>远程地址</th><th>端口</th><th>来源</th><th>状态</th>
+                        <th>风险</th><th>命中</th><th>到期</th>
+                        {% if is_admin %}<th>操作</th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                {% for rule in page_obj %}
+                    <tr>
+                        <td class="small">
+                            <a href="{% url 'fw_host_detail' rule.host_id %}">{{ rule.host.hostname }}</a>
+                        </td>
+                        <td class="small" style="max-width:200px; word-break:break-all;">{{ rule.rule_name }}</td>
+                        <td>{{ rule.direction }}</td>
+                        <td>
+                            {% if rule.action == 'Allow' %}<span class="vmp-tag vmp-tag-ok">Allow</span>
+                            {% else %}<span class="vmp-tag vmp-tag-bad">Block</span>{% endif %}
+                        </td>
+                        <td>{{ rule.protocol }}</td>
+                        <td class="small text-muted" style="max-width:160px; word-break:break-all;">{{ rule.program|default:'Any' }}</td>
+                        <td class="small">{{ rule.remote_address }}</td>
+                        <td>{{ rule.remote_port|default:'Any' }}</td>
+                        <td>
+                            {% if rule.source == 'auto' %}<span class="vmp-tag vmp-tag-info">自动</span>
+                            {% elif rule.source == 'request' %}<span class="vmp-tag vmp-tag-accent">申请</span>
+                            {% elif rule.source == 'manual' %}<span class="vmp-tag vmp-tag-warn">人工</span>
+                            {% else %}<span class="vmp-tag vmp-tag-mute">采集</span>{% endif %}
+                        </td>
+                        <td>
+                            {% if rule.status == 'active' %}<span class="vmp-tag vmp-tag-ok">生效中</span>
+                            {% elif rule.status == 'pending_deploy' %}<span class="vmp-tag vmp-tag-warn">待下发</span>
+                            {% elif rule.status == 'deploy_failed' %}<span class="vmp-tag vmp-tag-bad">下发失败</span>
+                            {% elif rule.status == 'recycle_candidate' %}<span class="vmp-tag vmp-tag-warn">待回收</span>
+                            {% elif rule.status == 'recycled' %}<span class="vmp-tag vmp-tag-mute">已回收</span>
+                            {% else %}<span class="vmp-tag vmp-tag-mute">已删除</span>{% endif %}
+                        </td>
+                        <td>
+                            {% if rule.risk_level == 'high' %}<span class="vmp-tag vmp-tag-bad">高</span>
+                            {% elif rule.risk_level == 'medium' %}<span class="vmp-tag vmp-tag-warn">中</span>
+                            {% else %}<span class="vmp-tag vmp-tag-ok">低</span>{% endif %}
+                        </td>
+                        <td>{{ rule.hit_count }}</td>
+                        <td class="small text-muted">{{ rule.expire_at|date:'m-d H:i'|default:'-' }}</td>
+                        {% if is_admin %}
+                        <td class="text-nowrap">
+                            {% if rule.status != 'deleted' %}
+                            <form method="post" action="{% url 'fw_rule_remove' rule.id %}" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-danger"
+                                        onclick="return confirm('确定删除该规则吗？（仅本系统 AUTO-ITOPS- 规则可删）');">删除</button>
+                            </form>
+                            <form method="post" action="{% url 'fw_rule_rollback' rule.id %}" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-warning"
+                                        onclick="return confirm('确定回滚该规则吗？');">回滚</button>
+                            </form>
+                            {% endif %}
+                        </td>
                         {% endif %}
-                    </td>
-                    {% endif %}
-                </tr>
-            {% empty %}
-                <tr><td colspan="14" class="empty-state">暂无规则</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="14" class="empty-state">暂无规则</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
-</div>
 
-{% include "firewall/_pager.html" %}
+    {% include "resize/partials/_pagination.html" with page=page_obj %}
+</div>
 {% endblock %}

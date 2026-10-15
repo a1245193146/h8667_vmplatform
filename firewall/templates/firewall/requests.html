@@ -3,16 +3,25 @@
 {% block title %}策略申请 - 信息系统运维平台{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="fw-bold mb-0" style="color: var(--vmp-ink);">防火墙策略申请</h3>
-    <a href="{% url 'fw_request_new' %}" class="btn btn-primary rounded-pill px-4">新建申请</a>
-</div>
+<div class="container-fluid py-4 vmp-fade-in">
 
-<div class="card mb-3">
-    <div class="card-body py-3">
+    <div class="vmp-page-head">
+        <div>
+            <h1>防火墙策略申请</h1>
+            <p class="vmp-sub">
+                申请经管理员批准后下发到目标主机，驳回需填写原因；临时规则到期后自动进入回收流程。
+                只有管理员能看到批准 / 驳回按钮。
+            </p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{% url 'fw_request_new' %}" class="btn btn-sm btn-primary">新建申请</a>
+        </div>
+    </div>
+
+    <div class="vmp-filterbar">
         <form method="get" class="row g-2 align-items-end">
             <div class="col-md-3">
-                <label class="form-label small mb-1">状态</label>
+                <label class="form-label">状态</label>
                 <select name="status" class="form-select">
                     <option value="">全部</option>
                     {% for val, label in status_choices %}
@@ -21,79 +30,79 @@
                 </select>
             </div>
             <div class="col-md-3">
-                <button type="submit" class="btn btn-primary rounded-pill px-4">筛选</button>
-                <a href="{% url 'fw_requests' %}" class="btn btn-outline-secondary rounded-pill px-3">重置</a>
+                <button type="submit" class="btn btn-outline-secondary">筛选</button>
+                <a href="{% url 'fw_requests' %}" class="btn btn-outline-secondary">重置</a>
             </div>
         </form>
     </div>
-</div>
 
-<div class="card">
-    <div class="card-body p-0">
-        <table class="table table-hover mb-0">
-            <thead class="table-warm">
-                <tr>
-                    <th>#</th><th>主机</th><th>应用</th><th>方向</th><th>协议</th>
-                    <th>远程地址</th><th>端口</th><th>申请人</th><th>临时</th><th>状态</th>
-                    <th>申请时间</th><th>审批</th>
-                </tr>
-            </thead>
-            <tbody>
-            {% for req in page_obj %}
-                <tr>
-                    <td>{{ req.id }}</td>
-                    <td class="small">
-                        <a href="{% url 'fw_host_detail' req.host_id %}">{{ req.host.hostname }}</a>
-                    </td>
-                    <td class="fw-semibold">{{ req.application }}</td>
-                    <td>{{ req.direction }}</td>
-                    <td>{{ req.protocol }}</td>
-                    <td class="small">{{ req.remote_address }}</td>
-                    <td>{{ req.remote_port|default:'Any' }}</td>
-                    <td>{{ req.applicant }}</td>
-                    <td>
-                        {% if req.is_temporary %}
-                        <span class="badge bg-warning text-dark">{{ req.expire_days }}天</span>
-                        {% else %}-{% endif %}
-                    </td>
-                    <td>
-                        {% if req.status == 'pending' %}<span class="badge bg-warning text-dark">待审核</span>
-                        {% elif req.status == 'approved' %}<span class="badge bg-success">已批准</span>
-                        {% elif req.status == 'rejected' %}<span class="badge bg-danger">已驳回</span>
-                        {% elif req.status == 'deployed' %}<span class="badge bg-success">已下发</span>
-                        {% else %}<span class="badge bg-danger">下发失败</span>{% endif %}
-                        {% if req.status == 'rejected' and req.reject_reason %}
-                        <div class="small text-muted">{{ req.reject_reason }}</div>
-                        {% endif %}
-                    </td>
-                    <td class="small text-muted">{{ req.created_at|date:'m-d H:i' }}</td>
-                    <td class="text-nowrap">
-                        {% if is_admin and req.status == 'pending' %}
-                        <form method="post" action="{% url 'fw_request_review' req.id 'approve' %}" class="d-inline">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-sm btn-success rounded-pill"
-                                    onclick="return confirm('确定批准并下发该策略吗？');">批准</button>
-                        </form>
-                        <form method="post" action="{% url 'fw_request_review' req.id 'reject' %}" class="d-inline"
-                              onsubmit="var r=prompt('请输入驳回原因：'); if(r===null){return false;} this.reject_reason.value=r; return true;">
-                            {% csrf_token %}
-                            <input type="hidden" name="reject_reason" value="">
-                            <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">驳回</button>
-                        </form>
-                        {% elif req.reviewer %}
-                        <span class="small text-muted">{{ req.reviewer }}<br>{{ req.reviewed_at|date:'m-d H:i' }}</span>
-                        {% else %}
-                        <span class="small text-muted">-</span>
-                        {% endif %}
-                    </td>
-                </tr>
-            {% empty %}
-                <tr><td colspan="12" class="empty-state">暂无策略申请</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
+    <div class="card">
+        <div class="card-body p-0 table-responsive">
+            <table class="table table-hover mb-0 vmp-table">
+                <thead>
+                    <tr>
+                        <th>#</th><th>主机</th><th>应用</th><th>方向</th><th>协议</th>
+                        <th>远程地址</th><th>端口</th><th>申请人</th><th>临时</th><th>状态</th>
+                        <th>申请时间</th><th>审批</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for req in page_obj %}
+                    <tr>
+                        <td>{{ req.id }}</td>
+                        <td class="small">
+                            <a href="{% url 'fw_host_detail' req.host_id %}">{{ req.host.hostname }}</a>
+                        </td>
+                        <td class="fw-semibold">{{ req.application }}</td>
+                        <td>{{ req.direction }}</td>
+                        <td>{{ req.protocol }}</td>
+                        <td class="small">{{ req.remote_address }}</td>
+                        <td>{{ req.remote_port|default:'Any' }}</td>
+                        <td>{{ req.applicant }}</td>
+                        <td>
+                            {% if req.is_temporary %}
+                            <span class="vmp-tag vmp-tag-warn">{{ req.expire_days }}天</span>
+                            {% else %}-{% endif %}
+                        </td>
+                        <td>
+                            {% if req.status == 'pending' %}<span class="vmp-tag vmp-tag-warn">待审核</span>
+                            {% elif req.status == 'approved' %}<span class="vmp-tag vmp-tag-ok">已批准</span>
+                            {% elif req.status == 'rejected' %}<span class="vmp-tag vmp-tag-bad">已驳回</span>
+                            {% elif req.status == 'deployed' %}<span class="vmp-tag vmp-tag-ok">已下发</span>
+                            {% else %}<span class="vmp-tag vmp-tag-bad">下发失败</span>{% endif %}
+                            {% if req.status == 'rejected' and req.reject_reason %}
+                            <div class="small text-muted">{{ req.reject_reason }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="small text-muted">{{ req.created_at|date:'m-d H:i' }}</td>
+                        <td class="text-nowrap">
+                            {% if is_admin and req.status == 'pending' %}
+                            <form method="post" action="{% url 'fw_request_review' req.id 'approve' %}" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-success"
+                                        onclick="return confirm('确定批准并下发该策略吗？');">批准</button>
+                            </form>
+                            <form method="post" action="{% url 'fw_request_review' req.id 'reject' %}" class="d-inline"
+                                  onsubmit="var r=prompt('请输入驳回原因：'); if(r===null){return false;} this.reject_reason.value=r; return true;">
+                                {% csrf_token %}
+                                <input type="hidden" name="reject_reason" value="">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">驳回</button>
+                            </form>
+                            {% elif req.reviewer %}
+                            <span class="small text-muted">{{ req.reviewer }}<br>{{ req.reviewed_at|date:'m-d H:i' }}</span>
+                            {% else %}
+                            <span class="small text-muted">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="12" class="empty-state">暂无策略申请</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
-</div>
 
-{% include "firewall/_pager.html" %}
+    {% include "resize/partials/_pagination.html" with page=page_obj %}
+</div>
 {% endblock %}

@@ -1,0 +1,47 @@
+{% comment %}
+通用分页条。用法：{% include "resize/partials/_pagination.html" with page=page %}
+
+筛选条件靠遍历 request.GET 保留，所以列表视图不需要额外传 querystring；
+代价是同名多值参数只保留最后一个——平台里的筛选项都是单值，够用。
+{% endcomment %}
+{% if page.paginator.num_pages > 1 %}
+<nav class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3" aria-label="分页">
+    <div class="text-muted small">
+        共 <strong>{{ page.paginator.count }}</strong> 条，第
+        <strong>{{ page.number }}</strong> / {{ page.paginator.num_pages }} 页
+    </div>
+    <ul class="pagination pagination-sm mb-0">
+        {% if page.has_previous %}
+        <li class="page-item">
+            <a class="page-link" href="?{% for k, v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v|urlencode }}&{% endif %}{% endfor %}page={{ page.previous_page_number }}">上一页</a>
+        </li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link">上一页</span></li>
+        {% endif %}
+
+        {% for n in page.paginator.page_range %}
+            {% if n == page.number %}
+            <li class="page-item active" aria-current="page"><span class="page-link">{{ n }}</span></li>
+            {% elif n > page.number|add:"-4" and n < page.number|add:"4" %}
+            <li class="page-item">
+                <a class="page-link" href="?{% for k, v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v|urlencode }}&{% endif %}{% endfor %}page={{ n }}">{{ n }}</a>
+            </li>
+            {% elif n == 1 or n == page.paginator.num_pages %}
+            <li class="page-item">
+                <a class="page-link" href="?{% for k, v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v|urlencode }}&{% endif %}{% endfor %}page={{ n }}">{{ n }}</a>
+            </li>
+            {% elif n == 2 or n == page.paginator.num_pages|add:"-1" %}
+            <li class="page-item disabled"><span class="page-link">…</span></li>
+            {% endif %}
+        {% endfor %}
+
+        {% if page.has_next %}
+        <li class="page-item">
+            <a class="page-link" href="?{% for k, v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v|urlencode }}&{% endif %}{% endfor %}page={{ page.next_page_number }}">下一页</a>
+        </li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link">下一页</span></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}

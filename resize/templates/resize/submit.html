@@ -3,64 +3,79 @@
 {% block title %}提交申请 - 虚拟机磁盘扩容平台{% endblock %}
 
 {% block content %}
-<div class="card max-w-lg mx-auto" style="max-width: 820px;">
-    <div class="card-header py-3">
-        <h4 class="mb-0 fw-bold">提交扩容申请</h4>
-    </div>
-    <div class="card-body p-4">
+<div class="container-fluid py-4 vmp-fade-in">
 
-        <!-- 步骤化引导 -->
-        <div class="step-guide">
-            <div class="step-item active" id="step1"><span class="step-num">1</span>输入 IP 查询</div>
-            <div class="step-item" id="step2"><span class="step-num">2</span>选择磁盘</div>
-            <div class="step-item" id="step3"><span class="step-num">3</span>填写容量与原因</div>
+    <div class="vmp-page-head">
+        <div>
+            <h1>提交扩容申请</h1>
+            <p class="vmp-sub">
+                输入虚拟机 IP 查询磁盘后提交：单次扩容 &lt; 200GB 且所在 datastore 预留 100GB 后仍有余量，
+                即自动审批并投递到后台队列异步执行；否则转入管理员审批。
+                提交时后端会用该 IP 重新查询 vCenter 覆盖磁盘信息，存在快照的虚拟机会被直接拦下、不落库。
+            </p>
         </div>
+    </div>
 
-        <form id="submitForm" method="POST" action="{% url 'submit' %}">
-            {% csrf_token %}
-            <div class="mb-4">
-                <label for="vm_ip" class="form-label fw-bold">虚拟机 IP 地址</label>
-                <div class="input-group">
-                    <input type="text" class="form-control" id="vm_ip" name="vm_ip" placeholder="例如: 192.168.1.100" required>
-                    <button class="btn btn-outline-primary" type="button" id="btnQueryDisks">查询磁盘</button>
-                </div>
-                <div id="vmStateWarning" class="mt-2"></div>
+    <div class="card">
+        <div class="vmp-card-head">
+            <h2>申请信息</h2>
+            <span class="vmp-hint">单次扩容上限 500GB，查询到磁盘后才能填写后续项</span>
+        </div>
+        <div class="card-body p-4">
+
+            <!-- 步骤化引导 -->
+            <div class="step-guide">
+                <div class="step-item active" id="step1"><span class="step-num">1</span>输入 IP 查询</div>
+                <div class="step-item" id="step2"><span class="step-num">2</span>选择磁盘</div>
+                <div class="step-item" id="step3"><span class="step-num">3</span>填写容量与原因</div>
             </div>
 
-            <div id="diskSelectionGroup" style="display: none;">
-                <div class="mb-3">
-                    <label for="diskSelect" class="form-label fw-bold">选择需要扩容的磁盘</label>
-                    <select class="form-select" id="diskSelect" required>
-                        <option value="">请选择磁盘...</option>
-                    </select>
-                </div>
-
-                <input type="hidden" id="disk_key" name="disk_key">
-                <input type="hidden" id="disk_label" name="disk_label">
-                <input type="hidden" id="current_size" name="current_size">
-
-                <div class="mb-3">
-                    <label for="add_size" class="form-label fw-bold">扩容大小 (GB)</label>
-                    <input type="number" class="form-control" id="add_size" name="add_size" min="1" max="500" required>
-                    <div class="form-text" id="autoApproveHint">单次扩容 &lt; 200GB 且存储充足将自动审批执行；否则需管理员审批。</div>
-                </div>
-
-                <div class="mb-3">
-                    <label for="id_drive_letter" class="form-label fw-bold">盘符 <span class="text-muted fw-normal small">（选填）</span></label>
-                    <input type="text" class="form-control" id="id_drive_letter" name="drive_letter" maxlength="1" placeholder="选填，如 D" style="max-width: 140px;">
-                    <div class="form-text">多磁盘机器建议填写，将传给 Ansible 精准扩容分区。</div>
-                </div>
-
+            <form id="submitForm" method="POST" action="{% url 'submit' %}">
+                {% csrf_token %}
                 <div class="mb-4">
-                    <label for="reason" class="form-label fw-bold">申请原因</label>
-                    <textarea class="form-control" id="reason" name="reason" rows="3" required placeholder="请详细说明扩容原因..."></textarea>
+                    <label for="vm_ip" class="form-label">虚拟机 IP 地址</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="vm_ip" name="vm_ip" placeholder="例如: 192.168.1.100" required>
+                        <button class="btn btn-outline-primary" type="button" id="btnQueryDisks">查询磁盘</button>
+                    </div>
+                    <div id="vmStateWarning" class="mt-2"></div>
                 </div>
 
-                <div class="d-grid gap-2">
-                    <button type="submit" class="btn btn-primary btn-lg" id="btnSubmit">提交申请</button>
+                <div id="diskSelectionGroup" style="display: none;">
+                    <div class="mb-3">
+                        <label for="diskSelect" class="form-label">选择需要扩容的磁盘</label>
+                        <select class="form-select" id="diskSelect" required>
+                            <option value="">请选择磁盘...</option>
+                        </select>
+                    </div>
+
+                    <input type="hidden" id="disk_key" name="disk_key">
+                    <input type="hidden" id="disk_label" name="disk_label">
+                    <input type="hidden" id="current_size" name="current_size">
+
+                    <div class="mb-3">
+                        <label for="add_size" class="form-label">扩容大小 (GB)</label>
+                        <input type="number" class="form-control" id="add_size" name="add_size" min="1" max="500" required>
+                        <div class="form-text" id="autoApproveHint">单次扩容 &lt; 200GB 且存储充足将自动审批执行；否则需管理员审批。</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="id_drive_letter" class="form-label">盘符 <span class="text-muted fw-normal small">（选填）</span></label>
+                        <input type="text" class="form-control" id="id_drive_letter" name="drive_letter" maxlength="1" placeholder="选填，如 D" style="max-width: 140px;">
+                        <div class="form-text">多磁盘机器建议填写，将传给 Ansible 精准扩容分区。</div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="reason" class="form-label">申请原因</label>
+                        <textarea class="form-control" id="reason" name="reason" rows="3" required placeholder="请详细说明扩容原因..."></textarea>
+                    </div>
+
+                    <div class="mt-4 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary" id="btnSubmit">提交申请</button>
+                    </div>
                 </div>
-            </div>
-        </form>
+            </form>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -145,10 +160,10 @@ document.addEventListener('DOMContentLoaded', function() {
             // Warning states
             const vmStatus = data.vm_status || {};
             if (vmStatus.has_snapshot) {
-                stateWarning.innerHTML += '<div class="alert alert-danger py-2 mb-2 shadow-sm">警告：该虚拟机存在快照，无法在原磁盘扩容！请先删除快照。</div>';
+                stateWarning.innerHTML += '<div class="alert alert-danger py-2 mb-2 vmp-fade-in">警告：该虚拟机存在快照，无法在原磁盘扩容！请先删除快照。</div>';
             }
             if (vmStatus.power_state === 'poweredOff') {
-                stateWarning.innerHTML += '<div class="alert alert-warning py-2 mb-2 shadow-sm">提示：该虚拟机当前处于关机状态，扩容后需开机手动完成文件系统扩容。</div>';
+                stateWarning.innerHTML += '<div class="alert alert-warning py-2 mb-2 vmp-fade-in">提示：该虚拟机当前处于关机状态，扩容后需开机手动完成文件系统扩容。</div>';
             }
 
             if (data.disks && data.disks.length > 0) {
@@ -171,11 +186,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 diskGroup.style.display = 'block';
                 setStep(2);
             } else {
-                stateWarning.innerHTML = '<div class="alert alert-info py-2 shadow-sm">未查询到可用磁盘。</div>';
+                stateWarning.innerHTML = '<div class="alert alert-info py-2 vmp-fade-in">未查询到可用磁盘。</div>';
                 diskGroup.style.display = 'none';
             }
         } catch (error) {
-            stateWarning.innerHTML = `<div class="alert alert-danger py-2 shadow-sm">${error.message}</div>`;
+            stateWarning.innerHTML = `<div class="alert alert-danger py-2 vmp-fade-in">${error.message}</div>`;
             diskGroup.style.display = 'none';
         } finally {
             btnQuery.disabled = false;

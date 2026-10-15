@@ -3,26 +3,36 @@
 {% block title %}防火墙主机 - 信息系统运维平台{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="fw-bold mb-0" style="color: var(--vmp-ink);">防火墙主机</h3>
-    <form method="post" action="{% url 'fw_hosts_sync' %}" class="mb-0">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-outline-primary rounded-pill px-4"
-                onclick="return confirm('确定从 Ansible inventory 同步主机列表吗？');">
-            同步主机
-        </button>
-    </form>
-</div>
+<div class="container-fluid py-4 vmp-fade-in">
 
-<div class="card mb-3">
-    <div class="card-body py-3">
+    <div class="vmp-page-head">
+        <div>
+            <h1>防火墙主机</h1>
+            <p class="vmp-sub">
+                清单每天 02:00 自动从 Ansible inventory 同步，也可手动触发；
+                防火墙状态与在线情况由每 30 分钟一次的采集写入。机器不可达时只把「在线」置为离线，
+                防火墙状态保留上一次成功采集的读数。
+            </p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <form method="post" action="{% url 'fw_hosts_sync' %}" class="mb-0">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-secondary"
+                        onclick="return confirm('确定从 Ansible inventory 同步主机列表吗？');">
+                    同步主机
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="vmp-filterbar">
         <form method="get" class="row g-2 align-items-end">
             <div class="col-md-3">
-                <label class="form-label small mb-1">关键字</label>
+                <label class="form-label">关键字</label>
                 <input type="text" name="q" value="{{ f_q }}" class="form-control" placeholder="主机名 / IP">
             </div>
             <div class="col-md-3">
-                <label class="form-label small mb-1">防火墙状态</label>
+                <label class="form-label">防火墙状态</label>
                 <select name="status" class="form-select">
                     <option value="">全部</option>
                     {% for val, label in status_choices %}
@@ -31,7 +41,7 @@
                 </select>
             </div>
             <div class="col-md-3">
-                <label class="form-label small mb-1">部门</label>
+                <label class="form-label">部门</label>
                 <select name="dept" class="form-select">
                     <option value="">全部</option>
                     {% for d in depts %}
@@ -40,59 +50,59 @@
                 </select>
             </div>
             <div class="col-md-3">
-                <button type="submit" class="btn btn-primary rounded-pill px-4">筛选</button>
-                <a href="{% url 'fw_hosts' %}" class="btn btn-outline-secondary rounded-pill px-3">重置</a>
+                <button type="submit" class="btn btn-primary">筛选</button>
+                <a href="{% url 'fw_hosts' %}" class="btn btn-outline-secondary">重置</a>
             </div>
         </form>
     </div>
-</div>
 
-<div class="card">
-    <div class="card-body p-0">
-        <table class="table table-hover mb-0">
-            <thead class="table-warm">
-                <tr>
-                    <th>主机名</th><th>IP</th><th>操作系统</th><th>部门</th>
-                    <th>防火墙状态</th><th>在线</th><th>最近采集</th><th>操作</th>
-                </tr>
-            </thead>
-            <tbody>
-            {% for host in page_obj %}
-                <tr>
-                    <td class="fw-semibold">{{ host.hostname }}</td>
-                    <td>{{ host.ip }}</td>
-                    <td class="text-muted small">{{ host.os_version|default:'-' }}</td>
-                    <td>{{ host.department|default:'-' }}</td>
-                    <td>
-                        {% if host.firewall_status == 'on' %}
-                            <span class="badge bg-success">已开启</span>
-                        {% elif host.firewall_status == 'off' %}
-                            <span class="badge bg-danger">已关闭</span>
-                        {% elif host.firewall_status == 'partial' %}
-                            <span class="badge bg-warning text-dark">部分开启</span>
-                        {% else %}
-                            <span class="badge bg-secondary">未知</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if host.is_online %}
-                            <span class="badge bg-success">在线</span>
-                        {% else %}
-                            <span class="badge bg-secondary">离线</span>
-                        {% endif %}
-                    </td>
-                    <td class="small text-muted">{{ host.last_collection_time|date:'m-d H:i'|default:'从未' }}</td>
-                    <td>
-                        <a href="{% url 'fw_host_detail' host.id %}" class="btn btn-sm btn-outline-primary rounded-pill px-3">详情</a>
-                    </td>
-                </tr>
-            {% empty %}
-                <tr><td colspan="8" class="empty-state">暂无主机，可点击右上角"同步主机"从 inventory 导入</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
+    <div class="card">
+        <div class="card-body p-0 table-responsive">
+            <table class="table table-hover mb-0 vmp-table">
+                <thead>
+                    <tr>
+                        <th>主机名</th><th>IP</th><th>操作系统</th><th>部门</th>
+                        <th>防火墙状态</th><th>在线</th><th>最近采集</th><th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for host in page_obj %}
+                    <tr>
+                        <td class="fw-semibold">{{ host.hostname }}</td>
+                        <td>{{ host.ip }}</td>
+                        <td class="text-muted small">{{ host.os_version|default:'-' }}</td>
+                        <td>{{ host.department|default:'-' }}</td>
+                        <td>
+                            {% if host.firewall_status == 'on' %}
+                                <span class="vmp-tag vmp-tag-ok">已开启</span>
+                            {% elif host.firewall_status == 'off' %}
+                                <span class="vmp-tag vmp-tag-bad">已关闭</span>
+                            {% elif host.firewall_status == 'partial' %}
+                                <span class="vmp-tag vmp-tag-warn">部分开启</span>
+                            {% else %}
+                                <span class="vmp-tag vmp-tag-mute">未知</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if host.is_online %}
+                                <span class="vmp-tag vmp-tag-ok">在线</span>
+                            {% else %}
+                                <span class="vmp-tag vmp-tag-mute">离线</span>
+                            {% endif %}
+                        </td>
+                        <td class="small text-muted">{{ host.last_collection_time|date:'m-d H:i'|default:'从未' }}</td>
+                        <td>
+                            <a href="{% url 'fw_host_detail' host.id %}" class="btn btn-sm btn-outline-secondary">详情</a>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="8" class="empty-state">暂无主机，可点击右上角"同步主机"从 inventory 导入</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
-</div>
 
-{% include "firewall/_pager.html" %}
+    {% include "resize/partials/_pagination.html" with page=page_obj %}
+</div>
 {% endblock %}

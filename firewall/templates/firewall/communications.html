@@ -3,97 +3,108 @@
 {% block title %}通信关系 - 信息系统运维平台{% endblock %}
 
 {% block content %}
-<h3 class="fw-bold mb-3" style="color: var(--vmp-ink);">通信关系（主机 → 程序 → 协议 → 目标IP → 端口）</h3>
+<div class="container-fluid py-4 vmp-fade-in">
 
-<div class="card mb-3">
-    <div class="card-body py-3">
+    <div class="vmp-page-head">
+        <div>
+            <h1>通信关系（主机 → 程序 → 协议 → 目标IP → 端口）</h1>
+            <p class="vmp-sub">
+                逐层展开的实际通信关系，由每 30 分钟一次的采集与关系刷新自动构建；
+                风险档按目标地址、端口与程序综合判定，命中非内部地址或敏感端口（135/139/445/3389/5985/5986）直接判高。
+            </p>
+        </div>
+    </div>
+
+    <div class="vmp-filterbar">
         <form method="get" class="row g-2 align-items-end">
             <div class="col-md-2">
-                <label class="form-label small mb-1">主机</label>
+                <label class="form-label">主机</label>
                 <input type="text" name="host" value="{{ f_host }}" class="form-control" placeholder="主机名 / IP">
             </div>
             <div class="col-md-2">
-                <label class="form-label small mb-1">目标 IP</label>
+                <label class="form-label">目标 IP</label>
                 <input type="text" name="ip" value="{{ f_ip }}" class="form-control" placeholder="如 10.1.2.3">
             </div>
             <div class="col-md-2">
-                <label class="form-label small mb-1">端口</label>
+                <label class="form-label">端口</label>
                 <input type="text" name="port" value="{{ f_port }}" class="form-control" placeholder="如 443">
             </div>
             <div class="col-md-2">
-                <label class="form-label small mb-1">应用 / 程序</label>
+                <label class="form-label">应用 / 程序</label>
                 <input type="text" name="app" value="{{ f_app }}" class="form-control" placeholder="程序路径或进程名">
             </div>
             <div class="col-md-2">
-                <label class="form-label small mb-1">部门</label>
+                <label class="form-label">部门</label>
                 <input type="text" name="dept" value="{{ f_dept }}" class="form-control" placeholder="部门">
             </div>
             <div class="col-md-2">
-                <button type="submit" class="btn btn-primary rounded-pill px-4">筛选</button>
-                <a href="{% url 'fw_communications' %}" class="btn btn-outline-secondary rounded-pill px-3">重置</a>
+                <button type="submit" class="btn btn-primary">筛选</button>
+                <a href="{% url 'fw_communications' %}" class="btn btn-outline-secondary">重置</a>
             </div>
         </form>
     </div>
-</div>
 
-{% for hnode in comm_tree %}
-<div class="card mb-3">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <span class="fw-bold">
-            <a href="{% url 'fw_host_detail' hnode.host.id %}">{{ hnode.host.hostname }}</a>
-            <small class="text-muted">{{ hnode.host.ip }}</small>
-        </span>
-        <span class="small text-muted">{{ hnode.host.department|default:'' }}</span>
-    </div>
-    <div class="card-body">
-        {% for pnode in hnode.programs %}
-        <div class="mb-3">
-            <div class="fw-semibold mb-1" style="color: var(--vmp-accent-dark);">
-                程序：{{ pnode.program|default:'（未知程序）' }}
-                {% if pnode.process_name %}<span class="badge bg-secondary">{{ pnode.process_name }}</span>{% endif %}
-            </div>
-            {% for tnode in pnode.protocols %}
-            <div class="ms-3 mb-2">
-                <span class="badge bg-info text-dark mb-1">{{ tnode.protocol }}</span>
-                <table class="table table-sm table-hover mb-0">
-                    <thead class="table-warm">
-                        <tr><th>目标 IP</th><th>端口</th><th>方向</th><th>风险</th><th>命中次数</th><th>首次出现</th><th>最近出现</th></tr>
-                    </thead>
-                    <tbody>
-                    {% for inode in tnode.ips %}
-                        {% for comm in inode.ports %}
-                        <tr>
-                            {% if forloop.first %}
-                            <td rowspan="{{ inode.ports|length }}" class="small">{{ inode.remote_ip|default:'-' }}</td>
-                            {% endif %}
-                            <td>{{ comm.remote_port|default:'-' }}</td>
-                            <td>{{ comm.direction }}</td>
-                            <td>
-                                {% if comm.risk_level == 'high' %}<span class="badge bg-danger">高</span>
-                                {% elif comm.risk_level == 'medium' %}<span class="badge bg-warning text-dark">中</span>
-                                {% else %}<span class="badge bg-success">低</span>{% endif %}
-                            </td>
-                            <td>{{ comm.hit_count }}</td>
-                            <td class="small text-muted">{{ comm.first_seen|date:'m-d H:i' }}</td>
-                            <td class="small text-muted">{{ comm.last_seen|date:'m-d H:i' }}</td>
-                        </tr>
+    {% for hnode in comm_tree %}
+    <div class="card mb-3">
+        <div class="vmp-card-head">
+            <h2>
+                <a href="{% url 'fw_host_detail' hnode.host.id %}">{{ hnode.host.hostname }}</a>
+                <small class="text-muted fw-normal fs-6">{{ hnode.host.ip }}</small>
+            </h2>
+            <span class="vmp-hint">{{ hnode.host.department|default:'' }}</span>
+        </div>
+        <div class="card-body">
+            {% for pnode in hnode.programs %}
+            <div class="mb-3">
+                <div class="fw-semibold mb-1" style="color: var(--vmp-accent-dark);">
+                    程序：{{ pnode.program|default:'（未知程序）' }}
+                    {% if pnode.process_name %}<span class="vmp-tag vmp-tag-mute">{{ pnode.process_name }}</span>{% endif %}
+                </div>
+                {% for tnode in pnode.protocols %}
+                <div class="ms-3 mb-2">
+                    <span class="vmp-tag vmp-tag-info mb-1">{{ tnode.protocol }}</span>
+                    <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 vmp-table">
+                        <thead>
+                            <tr><th>目标 IP</th><th>端口</th><th>方向</th><th>风险</th><th>命中次数</th><th>首次出现</th><th>最近出现</th></tr>
+                        </thead>
+                        <tbody>
+                        {% for inode in tnode.ips %}
+                            {% for comm in inode.ports %}
+                            <tr>
+                                {% if forloop.first %}
+                                <td rowspan="{{ inode.ports|length }}" class="small">{{ inode.remote_ip|default:'-' }}</td>
+                                {% endif %}
+                                <td>{{ comm.remote_port|default:'-' }}</td>
+                                <td>{{ comm.direction }}</td>
+                                <td>
+                                    {% if comm.risk_level == 'high' %}<span class="vmp-tag vmp-tag-bad">高</span>
+                                    {% elif comm.risk_level == 'medium' %}<span class="vmp-tag vmp-tag-warn">中</span>
+                                    {% else %}<span class="vmp-tag vmp-tag-ok">低</span>{% endif %}
+                                </td>
+                                <td>{{ comm.hit_count }}</td>
+                                <td class="small text-muted">{{ comm.first_seen|date:'m-d H:i' }}</td>
+                                <td class="small text-muted">{{ comm.last_seen|date:'m-d H:i' }}</td>
+                            </tr>
+                            {% endfor %}
                         {% endfor %}
-                    {% endfor %}
-                    </tbody>
-                </table>
+                        </tbody>
+                    </table>
+                    </div>
+                </div>
+                {% endfor %}
             </div>
             {% endfor %}
         </div>
-        {% endfor %}
     </div>
-</div>
-{% empty %}
-<div class="card">
-    <div class="card-body empty-state">
-        暂无通信关系数据。通信关系由周期采集自动构建，请稍后再来查看。
+    {% empty %}
+    <div class="card">
+        <div class="card-body">
+            {% include "resize/partials/_empty.html" with text="暂无通信关系数据。通信关系由周期采集自动构建，请稍后再来查看。" %}
+        </div>
     </div>
-</div>
-{% endfor %}
+    {% endfor %}
 
-{% include "firewall/_pager.html" %}
+    {% include "resize/partials/_pagination.html" with page=page_obj %}
+</div>
 {% endblock %}

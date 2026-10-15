@@ -3,84 +3,99 @@
 {% block title %}新建策略申请 - 信息系统运维平台{% endblock %}
 
 {% block content %}
-<h3 class="fw-bold mb-3" style="color: var(--vmp-ink);">新建防火墙策略申请</h3>
+<div class="container-fluid py-4 vmp-fade-in">
 
-<div class="card">
-    <div class="card-body">
-        <form method="post">
-            {% csrf_token %}
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <label class="form-label">目标主机 <span class="text-danger">*</span></label>
-                    <select name="host" class="form-select" required>
-                        <option value="">请选择主机</option>
-                        {% for h in hosts %}
-                        <option value="{{ h.id }}"
-                                {% if prefill_host and h.id|stringformat:"i" == prefill_host|stringformat:"i" %}selected
-                                {% elif old.host and h.id|stringformat:"i" == old.host %}selected{% endif %}>
-                            {{ h.hostname }}（{{ h.ip }}）
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">应用名称 <span class="text-danger">*</span></label>
-                    <input type="text" name="application" class="form-control" required
-                           value="{{ old.application|default:'' }}" placeholder="如：订单系统 API">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">程序路径</label>
-                    <input type="text" name="program" class="form-control"
-                           value="{{ old.program|default:'' }}" placeholder="如 C:\App\app.exe，留空表示任意程序">
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">方向</label>
-                    <select name="direction" class="form-select">
-                        <option value="Outbound" {% if old.direction == 'Outbound' %}selected{% endif %}>Outbound（出站）</option>
-                        <option value="Inbound" {% if old.direction == 'Inbound' %}selected{% endif %}>Inbound（入站）</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">协议</label>
-                    <select name="protocol" class="form-select">
-                        <option value="TCP" {% if old.protocol == 'TCP' %}selected{% endif %}>TCP</option>
-                        <option value="UDP" {% if old.protocol == 'UDP' %}selected{% endif %}>UDP</option>
-                        <option value="ANY" {% if old.protocol == 'ANY' %}selected{% endif %}>ANY</option>
-                    </select>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">远程地址</label>
-                    <input type="text" name="remote_address" class="form-control"
-                           value="{{ old.remote_address|default:'' }}" placeholder="如 10.1.2.3 或 10.1.0.0/24，留空为 Any">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">远程端口</label>
-                    <input type="text" name="remote_port" class="form-control"
-                           value="{{ old.remote_port|default:'' }}" placeholder="如 443 或 8080-8090，留空为 Any">
-                </div>
-                <div class="col-12">
-                    <label class="form-label">申请原因 <span class="text-danger">*</span></label>
-                    <textarea name="reason" class="form-control" rows="3" required
-                              placeholder="请说明业务背景与必要性">{{ old.reason|default:'' }}</textarea>
-                </div>
-                <div class="col-md-6">
-                    <div class="form-check mt-2">
-                        <input class="form-check-input" type="checkbox" name="is_temporary" id="is_temporary"
-                               {% if old.is_temporary %}checked{% endif %}>
-                        <label class="form-check-label" for="is_temporary">临时规则（到期自动进入回收流程）</label>
+    <div class="vmp-page-head">
+        <div>
+            <h1>新建防火墙策略申请</h1>
+            <p class="vmp-sub">
+                带 <span class="text-danger">*</span> 的必填。提交后由管理员审批，批准即下发到目标主机；
+                程序路径留空表示任意程序，临时规则到期后自动进入回收流程。
+            </p>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="vmp-card-head">
+            <h2>申请信息</h2>
+            <span class="vmp-hint">审批通过前不会在主机上产生任何规则</span>
+        </div>
+        <div class="card-body">
+            <form method="post">
+                {% csrf_token %}
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">目标主机 <span class="text-danger">*</span></label>
+                        <select name="host" class="form-select" required>
+                            <option value="">请选择主机</option>
+                            {% for h in hosts %}
+                            <option value="{{ h.id }}"
+                                    {% if prefill_host and h.id|stringformat:"i" == prefill_host|stringformat:"i" %}selected
+                                    {% elif old.host and h.id|stringformat:"i" == old.host %}selected{% endif %}>
+                                {{ h.hostname }}（{{ h.ip }}）
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">应用名称 <span class="text-danger">*</span></label>
+                        <input type="text" name="application" class="form-control" required
+                               value="{{ old.application|default:'' }}" placeholder="如：订单系统 API">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">程序路径</label>
+                        <input type="text" name="program" class="form-control"
+                               value="{{ old.program|default:'' }}" placeholder="如 C:\App\app.exe，留空表示任意程序">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">方向</label>
+                        <select name="direction" class="form-select">
+                            <option value="Outbound" {% if old.direction == 'Outbound' %}selected{% endif %}>Outbound（出站）</option>
+                            <option value="Inbound" {% if old.direction == 'Inbound' %}selected{% endif %}>Inbound（入站）</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">协议</label>
+                        <select name="protocol" class="form-select">
+                            <option value="TCP" {% if old.protocol == 'TCP' %}selected{% endif %}>TCP</option>
+                            <option value="UDP" {% if old.protocol == 'UDP' %}selected{% endif %}>UDP</option>
+                            <option value="ANY" {% if old.protocol == 'ANY' %}selected{% endif %}>ANY</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">远程地址</label>
+                        <input type="text" name="remote_address" class="form-control"
+                               value="{{ old.remote_address|default:'' }}" placeholder="如 10.1.2.3 或 10.1.0.0/24，留空为 Any">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">远程端口</label>
+                        <input type="text" name="remote_port" class="form-control"
+                               value="{{ old.remote_port|default:'' }}" placeholder="如 443 或 8080-8090，留空为 Any">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">申请原因 <span class="text-danger">*</span></label>
+                        <textarea name="reason" class="form-control" rows="3" required
+                                  placeholder="请说明业务背景与必要性">{{ old.reason|default:'' }}</textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" name="is_temporary" id="is_temporary"
+                                   {% if old.is_temporary %}checked{% endif %}>
+                            <label class="form-check-label" for="is_temporary">临时规则（到期自动进入回收流程）</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">有效天数（临时规则）</label>
+                        <input type="number" name="expire_days" class="form-control" min="1" max="365"
+                               value="{{ old.expire_days|default:30 }}">
                     </div>
                 </div>
-                <div class="col-md-6">
-                    <label class="form-label">有效天数（临时规则）</label>
-                    <input type="number" name="expire_days" class="form-control" min="1" max="365"
-                           value="{{ old.expire_days|default:30 }}">
+                <div class="mt-4 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">提交申请</button>
+                    <a href="{% url 'fw_requests' %}" class="btn btn-outline-secondary">取消</a>
                 </div>
-            </div>
-            <div class="mt-4 d-flex gap-2">
-                <button type="submit" class="btn btn-primary rounded-pill px-5">提交申请</button>
-                <a href="{% url 'fw_requests' %}" class="btn btn-outline-secondary rounded-pill px-4">取消</a>
-            </div>
-        </form>
+            </form>
+        </div>
     </div>
 </div>
 {% endblock %}

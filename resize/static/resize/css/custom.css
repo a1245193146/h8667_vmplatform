@@ -8,8 +8,17 @@
     --vmp-surface: #fffdf9;       /* 卡片表面 */
     --vmp-ink: #2c3e50;           /* 主文字 */
     --vmp-muted: #8a8378;         /* 次要文字 */
-    --vmp-accent: #c0803f;        /* 暖橙强调 */
-    --vmp-accent-dark: #a66a2f;
+    /* 品牌橙。原来的 #c0803f / #a66a2f 有四处当文字用（a、a:hover、
+       .text-primary、分页），对白底只有 3.23 / 4.38，白字压主按钮底 3.28，
+       全都在 WCAG AA 的 4.5 之下——运维在投影上看这个页面最吃对比度。
+       压暗是唯一的解：亮度 L<=0.1833 时"当文字"和"被白字压"两个方向
+       的对比度公式相同，一次过两条门禁。#a36433 是保住暖橙色相、
+       离原色最近（dE2000 10.4）还能留 0.17 余量的那一档。
+       顺带一个收益：原来品牌橙和徽章橙 --vmp-accent-bg #dd8015 只差 dE 7.0，
+       两种"橙"在页面上互相打；拉开到 15.3 之后职责清楚了。
+       改这两个值前先跑 %TEMP%/vmp_brand_decide.py 复核，别凭肉眼。 */
+    --vmp-accent: #a36433;        /* 暖橙强调 */
+    --vmp-accent-dark: #7c4c27;
     --vmp-accent-soft: #f3e4d2;   /* 暖橙浅底 */
     --vmp-border: #e8e0d4;        /* 柔和描边 */
     --vmp-shadow: 0 4px 18px rgba(80, 62, 40, 0.08);
@@ -126,6 +135,171 @@ main { flex: 1; }
     --bs-btn-hover-border-color: var(--vmp-accent);
     --bs-btn-active-bg: var(--vmp-accent-dark);
     --bs-btn-active-border-color: var(--vmp-accent-dark);
+}
+
+/* ---------- 语义色按钮：Bootstrap 的默认皮是冷蓝系，压在暖纸色背景上像外来物。
+   首页九宫格、审批页的通过/驳回都用了这几个类，所以在这里一次性收进调色板，
+   用与 .btn-primary 相同的 --bs-btn-* 变量覆盖，不动模板。
+   hover/active 用实测十六进制而非 var()：那是"同色系加深"，color-mix() 在旧浏览器上
+   会静默失效退回 Bootstrap 原色，反而更难看。
+   禁用态反过来用 -soft 底 + ink 字：亮底配白字（Bootstrap 的原做法是把底色减淡后
+   仍留白字，实测只有 2.6）根本读不出来。disabled 虽然被 WCAG 1.4.3 豁免，
+   但"点不动的按钮上的字也得能看清"本来就是常识。 ---- */
+.btn-success {
+    --bs-btn-color: var(--vmp-ok-fg);
+    --bs-btn-bg: var(--vmp-ok-bg);
+    --bs-btn-border-color: var(--vmp-ok-bg);
+    --bs-btn-hover-color: var(--vmp-ok-fg);
+    --bs-btn-hover-bg: #006949;
+    --bs-btn-hover-border-color: #006949;
+    --bs-btn-active-color: var(--vmp-ok-fg);
+    --bs-btn-active-bg: #00553b;
+    --bs-btn-active-border-color: #00553b;
+    --bs-btn-disabled-bg: var(--vmp-ok-soft);
+    --bs-btn-disabled-border-color: var(--vmp-ok-soft);
+    --bs-btn-disabled-color: var(--vmp-ok);
+}
+
+/* .btn-info 在 Bootstrap 5.3 里默认是"黑字亮青底"，hover/active 的 --bs-btn-*-color
+   也全是 #000。只改 bg 不改 color，鼠标一移上去就变成黑字压在深蓝上（对比 2.2）。
+   所以每一档的 hover/active/disabled 三组文字色都得显式写死，不能只覆盖静止态。 */
+.btn-info {
+    --bs-btn-color: var(--vmp-info-fg);
+    --bs-btn-bg: var(--vmp-info-bg);
+    --bs-btn-border-color: var(--vmp-info-bg);
+    --bs-btn-hover-color: var(--vmp-info-fg);
+    --bs-btn-hover-bg: #00476f;
+    --bs-btn-hover-border-color: #00476f;
+    --bs-btn-active-color: var(--vmp-info-fg);
+    --bs-btn-active-bg: #003a5a;
+    --bs-btn-active-border-color: #003a5a;
+    --bs-btn-disabled-bg: var(--vmp-info-soft);
+    --bs-btn-disabled-border-color: var(--vmp-info-soft);
+    --bs-btn-disabled-color: var(--vmp-info);
+}
+
+/* 警示底是亮黄，字必须是深色——用 -fg 令牌（#2e2a00），不能沿用 Bootstrap 的白字。 */
+.btn-warning {
+    --bs-btn-color: var(--vmp-warn-fg);
+    --bs-btn-bg: var(--vmp-warn-bg);
+    --bs-btn-border-color: var(--vmp-warn-bg);
+    --bs-btn-hover-bg: #cebb3f;
+    --bs-btn-hover-border-color: #cebb3f;
+    --bs-btn-hover-color: var(--vmp-warn-fg);
+    --bs-btn-active-bg: #b3a232;
+    --bs-btn-active-border-color: #b3a232;
+    --bs-btn-active-color: var(--vmp-warn-fg);
+    --bs-btn-disabled-bg: var(--vmp-warn-soft);
+    --bs-btn-disabled-border-color: var(--vmp-warn-soft);
+    --bs-btn-disabled-color: var(--vmp-warn);
+}
+
+.btn-secondary {
+    --bs-btn-color: var(--vmp-mute-fg);
+    --bs-btn-bg: var(--vmp-mute-bg);
+    --bs-btn-border-color: var(--vmp-mute-bg);
+    --bs-btn-hover-color: var(--vmp-mute-fg);
+    --bs-btn-hover-bg: #504a42;
+    --bs-btn-hover-border-color: #504a42;
+    --bs-btn-active-color: var(--vmp-mute-fg);
+    --bs-btn-active-bg: #423d37;
+    --bs-btn-active-border-color: #423d37;
+    --bs-btn-disabled-bg: var(--vmp-mute-soft);
+    --bs-btn-disabled-border-color: var(--vmp-mute-soft);
+    --bs-btn-disabled-color: var(--vmp-mute);
+}
+
+.btn-danger {
+    --bs-btn-color: var(--vmp-bad-fg);
+    --bs-btn-bg: var(--vmp-bad-bg);
+    --bs-btn-border-color: var(--vmp-bad-bg);
+    --bs-btn-hover-color: var(--vmp-bad-fg);
+    --bs-btn-hover-bg: #96350b;
+    --bs-btn-hover-border-color: #96350b;
+    --bs-btn-active-color: var(--vmp-bad-fg);
+    --bs-btn-active-bg: #7a2b09;
+    --bs-btn-active-border-color: #7a2b09;
+    --bs-btn-disabled-bg: var(--vmp-bad-soft);
+    --bs-btn-disabled-border-color: var(--vmp-bad-soft);
+    --bs-btn-disabled-color: var(--vmp-bad);
+}
+
+/* 只描边的语义按钮：静止态文字用 ink 令牌（小字对白底 >= 4.5 已验收），
+   悬停才整块填充，避免亮黄底配白字那种看不清的组合。
+   禁用态也必须显式写：Bootstrap 的 --bs-btn-disabled-color 会退回它自己的冷色
+   （outline-info 禁用后是 #0dcaf0 青白，压白底 1.93，等于文字消失）。 */
+.btn-outline-danger {
+    --bs-btn-color: var(--vmp-bad);
+    --bs-btn-border-color: var(--vmp-bad-bg);
+    --bs-btn-hover-bg: var(--vmp-bad-bg);
+    --bs-btn-hover-border-color: var(--vmp-bad-bg);
+    --bs-btn-hover-color: var(--vmp-bad-fg);
+    --bs-btn-active-bg: #96350b;
+    --bs-btn-active-border-color: #96350b;
+    --bs-btn-active-color: var(--vmp-bad-fg);
+    --bs-btn-disabled-color: var(--vmp-mute);
+    --bs-btn-disabled-bg: transparent;
+    --bs-btn-disabled-border-color: var(--vmp-mute-soft);
+}
+
+.btn-outline-success {
+    --bs-btn-color: var(--vmp-ok);
+    --bs-btn-border-color: var(--vmp-ok-bg);
+    --bs-btn-hover-bg: var(--vmp-ok-bg);
+    --bs-btn-hover-border-color: var(--vmp-ok-bg);
+    --bs-btn-hover-color: var(--vmp-ok-fg);
+    --bs-btn-active-bg: #006949;
+    --bs-btn-active-border-color: #006949;
+    --bs-btn-active-color: var(--vmp-ok-fg);
+    --bs-btn-disabled-color: var(--vmp-mute);
+    --bs-btn-disabled-bg: transparent;
+    --bs-btn-disabled-border-color: var(--vmp-mute-soft);
+}
+
+/* 全站用得最多的一个类（88 处）：Bootstrap 给的是冷灰 #6c757d，
+   暖纸色背景上跟主题不是一套东西。换成设计系统里的暖灰 --vmp-mute，
+   对白底的对比度已由 test_vmp_palette 的 ink 门禁保证 >= 4.5。 */
+.btn-outline-secondary {
+    --bs-btn-color: var(--vmp-mute);
+    --bs-btn-border-color: var(--vmp-mute-bg);
+    --bs-btn-hover-bg: var(--vmp-mute-bg);
+    --bs-btn-hover-border-color: var(--vmp-mute-bg);
+    --bs-btn-hover-color: var(--vmp-mute-fg);
+    --bs-btn-active-bg: #504a42;
+    --bs-btn-active-border-color: #504a42;
+    --bs-btn-active-color: var(--vmp-mute-fg);
+    --bs-btn-disabled-color: var(--vmp-mute);
+    --bs-btn-disabled-bg: transparent;
+    --bs-btn-disabled-border-color: var(--vmp-mute-soft);
+}
+
+.btn-outline-info {
+    --bs-btn-color: var(--vmp-info);
+    --bs-btn-border-color: var(--vmp-info-bg);
+    --bs-btn-hover-bg: var(--vmp-info-bg);
+    --bs-btn-hover-border-color: var(--vmp-info-bg);
+    --bs-btn-hover-color: var(--vmp-info-fg);
+    --bs-btn-active-bg: #00476f;
+    --bs-btn-active-border-color: #00476f;
+    --bs-btn-active-color: var(--vmp-info-fg);
+    --bs-btn-disabled-color: var(--vmp-mute);
+    --bs-btn-disabled-bg: transparent;
+    --bs-btn-disabled-border-color: var(--vmp-mute-soft);
+}
+
+/* 静止态文字用 ink（#75660a）而不是 Bootstrap 的 #ffc107——亮黄当文字在白底只有 1.6。 */
+.btn-outline-warning {
+    --bs-btn-color: var(--vmp-warn);
+    --bs-btn-border-color: var(--vmp-warn-bg);
+    --bs-btn-hover-bg: var(--vmp-warn-bg);
+    --bs-btn-hover-border-color: var(--vmp-warn-bg);
+    --bs-btn-hover-color: var(--vmp-warn-fg);
+    --bs-btn-active-bg: #cebb3f;
+    --bs-btn-active-border-color: #cebb3f;
+    --bs-btn-active-color: var(--vmp-warn-fg);
+    --bs-btn-disabled-color: var(--vmp-mute);
+    --bs-btn-disabled-bg: transparent;
+    --bs-btn-disabled-border-color: var(--vmp-mute-soft);
 }
 
 .text-primary { color: var(--vmp-accent-dark) !important; }
@@ -319,3 +493,344 @@ a:hover { color: var(--vmp-accent); }
 .icon-teal   { background-color: #dfeceb; color: #4e7a72; }
 .icon-amber  { background-color: #f6ecd4; color: #9a7b2d; }
 .icon-slate  { background-color: #e4e4e0; color: #5f5f58; }
+
+
+/* =========================================================
+   设计系统层（vmp-*）：统一令牌 + 复用组件
+   ---------------------------------------------------------
+   为什么要有这一层：以前每个页面各写一套 card/table/badge，
+   间距、圆角、状态色、空态、加载态全凭手感，整体就显得生硬。
+   这一层把"能变的"收敛成令牌、把"重复的"收敛成组件类，
+   新页面只组装不新写样式。所有值都延续上面的暖色系，不换主题。
+   ========================================================= */
+
+:root {
+    /* 间距：4 的倍数，只用这几档，不再随手写 px */
+    --vmp-sp-1: 4px;
+    --vmp-sp-2: 8px;
+    --vmp-sp-3: 12px;
+    --vmp-sp-4: 16px;
+    --vmp-sp-5: 24px;
+    --vmp-sp-6: 32px;
+
+    /* 圆角：小=标签/输入，中=卡片，大=弹层 */
+    --vmp-r-sm: 8px;
+    --vmp-r-md: var(--vmp-radius);
+    --vmp-r-lg: 20px;
+
+    /* 阴影：三档，hover 才升到第二档，不要到处用重阴影 */
+    --vmp-sh-1: 0 1px 3px rgba(80, 62, 40, .06);
+    --vmp-sh-2: var(--vmp-shadow);
+    --vmp-sh-3: var(--vmp-shadow-hover);
+
+    /* 状态色六档：成功/警告/危险/信息/中性/强调。
+     *
+     * 每档四个令牌，各管一件事，别再让一个色值身兼数职：
+     *   -bg   徽章填充。饱和色，六档两两 dE2000 >= 14。
+     *   -fg   徽章文字。绿/红/蓝/灰用白字；黄、橙压暗就不像"警告黄"了，
+     *         改用同色系深字——与 Bootstrap 的 .bg-warning.text-dark 同理。
+     *   （无后缀）白底上的文字色：统计数字、进度条、toast 描边、截断声明。
+     *   -soft 大面积淡底：卡片头、行内代码。淡色不适合当小徽章底，见下。
+     *
+     * 为什么必须拆开：一个色值不可能既"淡到能铺大面积"又"深到能在白底上当
+     * 11px 小字"。原来只有 -soft 和主色两个，折中出来的中间值两头不靠——
+     * 六档 -soft 挤在 L*>92 的高明度窄带里，两两色差最小只有 3.6
+     * （warn/accent），服务关联登记那四枚集成来源徽章因此糊成一片米色，
+     * 运维看不出 Nginx / Supervisor / Jenkins / Git 的区别；五档的文字对比度
+     * 还低于 WCAG AA 的 4.5。
+     *
+     * -bg 的色相骨架取自 Okabe-Ito 色盲安全分类色（PNAS 2008）。六档里
+     * 红/橙/黄/绿全在，正好是二色觉最容易混的一轴，所以验收时除了正常视觉
+     * 的 dE2000，还跑了绿色盲/红色盲模拟（最小 6.8 / 11.0）。
+     * 改任何一个色值前，先用 %TEMP%/vmp_tokens_verify.py 复核，别凭肉眼。
+     *
+     * --vmp-accent / -dark / -soft 是品牌色（按钮、链接、分页、导航圆点），
+     * 全站几十处在用，不在这里改；accent 档只新增 -bg / -fg 给徽章。
+     */
+    --vmp-ok-bg: #00875e;      --vmp-ok-fg: #ffffff;
+    --vmp-warn-bg: #f2dc4a;    --vmp-warn-fg: #2e2a00;
+    --vmp-bad-bg: #c1440e;     --vmp-bad-fg: #ffffff;
+    --vmp-info-bg: #005b8f;    --vmp-info-fg: #ffffff;
+    --vmp-mute-bg: #665f55;    --vmp-mute-fg: #ffffff;
+    --vmp-accent-bg: #dd8015;  --vmp-accent-fg: #2b1a06;
+
+    --vmp-ok: #2f8261;      --vmp-ok-soft: #d4f2e3;
+    --vmp-warn: #75660a;    --vmp-warn-soft: #f8eba8;
+    --vmp-bad: #c1440e;     --vmp-bad-soft: #ffd5c2;
+    --vmp-info: #005b8f;    --vmp-info-soft: #dfecff;
+    --vmp-mute: #665f55;    --vmp-mute-soft: #e2dfdc;
+
+    /* 页面两侧留白。Bootstrap 的 .container-fluid 只给 12px，而 .row 的
+       -0.75rem 负外边距又正好把它抵掉，于是正文几乎贴着浏览器边框。
+       改 padding 而不是改 --bs-gutter-x：后者会连带把列间距一起撑宽。 */
+    --vmp-page-pad: clamp(20px, 2.2vw, 44px);
+
+    /* 动效：统一一条缓动曲线，时长只取这三档。
+       "不灵动"多半不是缺动画，而是各处时长曲线不一致 */
+    --vmp-ease: cubic-bezier(.22, .61, .36, 1);
+    --vmp-t-fast: .14s;
+    --vmp-t-base: .22s;
+    --vmp-t-slow: .4s;
+
+    /* 等宽字体：命令与日志必须等宽，否则列对不齐 */
+    --vmp-mono: "Cascadia Mono", Consolas, "Courier New", monospace;
+}
+
+/* ---------- 页面留白：正文不要贴着浏览器边框 ----------
+ *
+ * Bootstrap 的 .container-fluid 只给 12px 侧内边距，而 .row 的
+ * margin-inline: -.75rem 又正好把它抵掉，于是第一列的文字离屏幕边缘只有
+ * 12px——用户说的"两边布局太顶到框了"就是这个，而且是全站每个页面都这样
+ * （所有页面模板都以 <div class="container-fluid py-4"> 开头）。
+ *
+ * 只改 padding、不改 --bs-gutter-x：后者会连带把列与列之间的间距一起撑宽。
+ * 改完之后 .row 的 -0.75rem 负边距仍然只抵消它自己那 12px，
+ * 列内 padding 再补回来，所以"卡片"和"栅格里的第一列"左边缘依然对齐。
+ *
+ * 导航条与页脚一起改，否则品牌名在 12px 处、正文在 30px 处，看着错位。
+ */
+.navbar-warm > .container-fluid,
+main > .container-fluid,
+.footer-warm > .container-fluid {
+    padding-inline: var(--vmp-page-pad);
+}
+
+/* ---------- 页头 ---------- */
+.vmp-page-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--vmp-sp-3);
+    margin-bottom: var(--vmp-sp-4);
+}
+
+.vmp-page-head h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin: 0;
+    color: var(--vmp-ink);
+}
+
+.vmp-page-head .vmp-sub {
+    color: var(--vmp-muted);
+    font-size: .85rem;
+    margin: var(--vmp-sp-1) 0 0;
+    max-width: 70ch;
+}
+
+/* ---------- 统计块：首页/看板共用 ---------- */
+.vmp-stat {
+    background: var(--vmp-surface);
+    border: 1px solid var(--vmp-border);
+    border-radius: var(--vmp-r-md);
+    box-shadow: var(--vmp-sh-1);
+    padding: var(--vmp-sp-4);
+    transition: box-shadow var(--vmp-t-base) var(--vmp-ease),
+                transform var(--vmp-t-base) var(--vmp-ease);
+}
+
+.vmp-stat:hover { box-shadow: var(--vmp-sh-2); transform: translateY(-2px); }
+.vmp-stat .vmp-stat-num { font-size: 1.75rem; font-weight: 700; line-height: 1.1; }
+.vmp-stat .vmp-stat-label { color: var(--vmp-muted); font-size: .8rem; margin-top: var(--vmp-sp-1); }
+.vmp-stat.is-ok .vmp-stat-num   { color: var(--vmp-ok); }
+.vmp-stat.is-warn .vmp-stat-num { color: var(--vmp-warn); }
+.vmp-stat.is-bad .vmp-stat-num  { color: var(--vmp-bad); }
+
+/* ---------- 标签：六档语义色，别再手写 bg-danger/bg-light ----------
+ *
+ * 任务 status 是唯一一套全站共用的状态词表，配色在此定死，各页面照抄：
+ *   pending_approval 等待审批 -> vmp-tag-warn    等人处理，必须是黄，不能是灰
+ *   approved         等待执行 -> vmp-tag-info    已批准排队中，人不需再动手
+ *   pending          等待执行 -> vmp-tag-mute    刚提交还没排上
+ *   running          执行中   -> vmp-tag-accent
+ *   success          成功     -> vmp-tag-ok
+ *   failed / rejected 失败/驳回 -> vmp-tag-bad
+ *
+ * 同一个 status 在列表页和详情页颜色不同，运维会以为看错了单子；
+ * 把"等人审批"画成灰色更糟——它会被当成"没动静"直接忽略掉。
+ * detail.html / history.html 的轮询脚本里还有一份同样映射的 BADGE_CLASS，
+ * 改这里要连它一起改，否则页面加载十秒后标签自己变色。
+ */
+.vmp-tag {
+    display: inline-block;
+    padding: 2px var(--vmp-sp-2);
+    border-radius: var(--vmp-r-sm);
+    font-size: .75rem;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+
+/* 徽章用饱和的 -bg/-fg，不用 -soft：徽章面积小，淡底压不住，
+   六档并排看就是同一种米色。文字对比度全部 >= 4.5（.75rem 粗体不算
+   WCAG 的大字号，不能套 3.0 那条宽松线）。 */
+.vmp-tag-ok   { background: var(--vmp-ok-bg);     color: var(--vmp-ok-fg); }
+.vmp-tag-warn { background: var(--vmp-warn-bg);   color: var(--vmp-warn-fg); }
+.vmp-tag-bad  { background: var(--vmp-bad-bg);    color: var(--vmp-bad-fg); }
+.vmp-tag-info { background: var(--vmp-info-bg);   color: var(--vmp-info-fg); }
+.vmp-tag-mute { background: var(--vmp-mute-bg);   color: var(--vmp-mute-fg); }
+/* 强调色标签：给"建议/可执行下一步"这类既非事实也非告警的条目，
+   免得和事实(绿)、推测(黄)撞色——排查页时间线四类必须一眼分得开。
+   注意用的是徽章专用的 --vmp-accent-bg，不是品牌色 --vmp-accent。 */
+.vmp-tag-accent { background: var(--vmp-accent-bg); color: var(--vmp-accent-fg); }
+
+/* 淡底版本：给需要"整块铺色"而不是"一枚小标签"的场合（行高亮、大区块）。
+   与 .vmp-tag-* 的分工见上面令牌块的注释。 */
+.vmp-tag-soft-ok   { background: var(--vmp-ok-soft);   color: var(--vmp-ok); }
+.vmp-tag-soft-warn { background: var(--vmp-warn-soft); color: var(--vmp-warn); }
+.vmp-tag-soft-bad  { background: var(--vmp-bad-soft);  color: var(--vmp-bad); }
+.vmp-tag-soft-info { background: var(--vmp-info-soft); color: var(--vmp-info); }
+.vmp-tag-soft-mute { background: var(--vmp-mute-soft); color: var(--vmp-mute); }
+
+/* ---------- 筛选条：查询表单统一形态 ---------- */
+.vmp-filterbar {
+    background: var(--vmp-surface);
+    border: 1px solid var(--vmp-border);
+    border-radius: var(--vmp-r-md);
+    padding: var(--vmp-sp-3) var(--vmp-sp-4);
+    margin-bottom: var(--vmp-sp-4);
+    box-shadow: var(--vmp-sh-1);
+}
+
+.vmp-filterbar .form-label { font-size: .75rem; margin-bottom: 2px; color: var(--vmp-muted); }
+.vmp-filterbar .form-select, .vmp-filterbar .form-control { font-size: .85rem; }
+
+/* ---------- 代码/命令：等宽 + 可横向滚动，绝不静默折行截断 ---------- */
+.vmp-code {
+    font-family: var(--vmp-mono);
+    font-size: .8rem;
+    background: var(--vmp-mute-soft);
+    border-radius: var(--vmp-r-sm);
+    padding: 1px var(--vmp-sp-2);
+    word-break: break-all;
+}
+
+.vmp-code-block {
+    font-family: var(--vmp-mono);
+    font-size: .8rem;
+    background: #2c3e50;
+    color: #e9e2d6;
+    border-radius: var(--vmp-r-sm);
+    padding: var(--vmp-sp-3);
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 420px;
+    overflow: auto;
+    margin: 0;
+}
+
+/* ---------- 截断声明：任何"只列了一部分"的地方都必须挂这个 ---------- */
+.vmp-truncated {
+    color: var(--vmp-warn);
+    font-size: .78rem;
+    margin-top: var(--vmp-sp-1);
+}
+
+/* ---------- 凭据输入框：等宽 + 字距，让首尾多余空格看得出来 ---------- */
+.vmp-secret-input {
+    font-family: var(--vmp-mono);
+    letter-spacing: .5px;
+}
+
+/* ---------- 骨架屏：异步加载时给形状，不要白屏 ---------- */
+.vmp-skeleton {
+    background: linear-gradient(90deg, var(--vmp-mute-soft) 25%, #f6f2ea 50%, var(--vmp-mute-soft) 75%);
+    background-size: 200% 100%;
+    animation: vmp-shimmer 1.3s infinite var(--vmp-ease);
+    border-radius: var(--vmp-r-sm);
+    color: transparent !important;
+    min-height: 1em;
+}
+
+@keyframes vmp-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ---------- Toast：替代满屏 alert，异步操作的反馈走这里 ---------- */
+.vmp-toast-wrap {
+    position: fixed;
+    top: var(--vmp-sp-5);
+    right: var(--vmp-sp-5);
+    z-index: 1080;
+    display: flex;
+    flex-direction: column;
+    gap: var(--vmp-sp-2);
+    max-width: min(420px, 92vw);
+}
+
+.vmp-toast {
+    background: var(--vmp-surface);
+    border: 1px solid var(--vmp-border);
+    border-left: 4px solid var(--vmp-info-bg);
+    border-radius: var(--vmp-r-sm);
+    box-shadow: var(--vmp-sh-3);
+    padding: var(--vmp-sp-3) var(--vmp-sp-4);
+    font-size: .86rem;
+    animation: vmp-toast-in var(--vmp-t-base) var(--vmp-ease);
+}
+
+.vmp-toast.is-ok   { border-left-color: var(--vmp-ok-bg); }
+.vmp-toast.is-warn { border-left-color: var(--vmp-warn-bg); }
+.vmp-toast.is-bad  { border-left-color: var(--vmp-bad-bg); }
+.vmp-toast.is-out  { animation: vmp-toast-out var(--vmp-t-base) var(--vmp-ease) forwards; }
+
+@keyframes vmp-toast-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+@keyframes vmp-toast-out { to { opacity: 0; transform: translateX(16px); } }
+
+/* ---------- 表格：可点行 + 行内展开 ---------- */
+.vmp-table > :not(caption) > * > * { padding: var(--vmp-sp-2) var(--vmp-sp-3); }
+.vmp-table thead th {
+    font-size: .75rem;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--vmp-muted);
+    font-weight: 600;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--vmp-border);
+}
+
+.vmp-row-click { cursor: pointer; transition: background-color var(--vmp-t-fast) var(--vmp-ease); }
+.vmp-row-click:hover { background-color: var(--vmp-accent-soft); }
+.vmp-row-detail > td { background: #faf7f1; padding: 0 !important; }
+.vmp-row-detail-inner { padding: var(--vmp-sp-3) var(--vmp-sp-4); }
+
+/* ---------- 卡片头：标题 + 右侧操作，别再各自 d-flex ---------- */
+.vmp-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--vmp-sp-3);
+    padding: var(--vmp-sp-3) var(--vmp-sp-4);
+    border-bottom: 1px solid var(--vmp-border);
+    background: transparent;
+}
+
+.vmp-card-head h2, .vmp-card-head h3 { font-size: .95rem; font-weight: 700; margin: 0; }
+.vmp-card-head .vmp-hint { color: var(--vmp-muted); font-size: .78rem; }
+
+/* 卡片头的语义底色。用主题自己的 --vmp-*-soft，别用 Bootstrap 的 bg-*-subtle：
+ * 那套是冷调的，压在这层暖纸色背景上会跳色，看着像两块皮拼在一起。 */
+.vmp-card-head.is-ok     { background: var(--vmp-ok-soft); }
+.vmp-card-head.is-info   { background: var(--vmp-info-soft); }
+.vmp-card-head.is-warn   { background: var(--vmp-warn-soft); }
+.vmp-card-head.is-bad    { background: var(--vmp-bad-soft); }
+.vmp-card-head.is-accent { background: var(--vmp-accent-soft); }
+
+/* 进度条的阈值配色，同理走主题色而不是 Bootstrap 的 bg-danger/bg-warning。
+   进度条是图形不是文字，用饱和的 -bg；不带后缀的那个是给白底文字用的深色版。 */
+.vmp-bar-warn { background-color: var(--vmp-warn-bg); }
+.vmp-bar-bad  { background-color: var(--vmp-bad-bg); }
+.vmp-bar-ok   { background-color: var(--vmp-ok-bg); }
+
+/* ---------- 淡入：页面切换/内容替换时的过渡 ---------- */
+.vmp-fade-in { animation: vmp-fade var(--vmp-t-slow) var(--vmp-ease); }
+@keyframes vmp-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ---------- 减少动效：尊重系统设置，晕动症用户不该被迫看动画 ---------- */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: .001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .001ms !important;
+    }
+}

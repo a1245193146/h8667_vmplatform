@@ -4,50 +4,55 @@
 {% block title %}防火墙监控看板 - 信息系统运维平台{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="fw-bold mb-0" style="color: var(--vmp-ink);">防火墙监控看板</h3>
-    <small class="text-muted">数据来自周期采集，每 60 秒自动刷新</small>
-</div>
+<div class="container-fluid py-4 vmp-fade-in">
 
-{{ data|json_script:"dashboard-data" }}
+    <div class="vmp-page-head">
+        <div>
+            <h1>防火墙监控看板</h1>
+            <p class="vmp-sub">主机防火墙状态、今日事件、策略规则、Ansible 任务与风险的一屏汇总；数据由每 30 分钟一次的周期采集写入，本页只读、不下发变更。</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <small class="text-muted">数据来自周期采集，每 60 秒自动刷新</small>
+            <a href="{% url 'fw_hosts' %}" class="btn btn-sm btn-outline-secondary">主机清单</a>
+            <a href="{% url 'fw_rules' %}" class="btn btn-sm btn-outline-secondary">规则清单</a>
+            <a href="{% url 'fw_communications' %}" class="btn btn-sm btn-outline-secondary">通信关系</a>
+        </div>
+    </div>
 
-<!-- KPI 五组 -->
-<div class="row">
-    <div class="col-md mb-3">
-        <div class="card h-100">
-            <div class="card-body py-3">
-                <div class="text-muted small mb-2">主机概况</div>
-                <div class="fs-4 fw-bold text-primary" id="kpi-host-total">{{ data.host_summary.total }}</div>
-                <div class="small mt-1">
-                    <span class="badge bg-success">开启 <span id="kpi-host-on">{{ data.host_summary.on }}</span></span>
-                    <span class="badge bg-danger">关闭 <span id="kpi-host-off">{{ data.host_summary.off }}</span></span>
-                    <span class="badge bg-warning text-dark">部分 <span id="kpi-host-partial">{{ data.host_summary.partial }}</span></span>
+    {{ data|json_script:"dashboard-data" }}
+
+    <!-- KPI 五组 -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg">
+            <div class="vmp-stat h-100">
+                <div class="vmp-stat-label mb-2">主机概况</div>
+                <div class="vmp-stat-num text-primary" id="kpi-host-total">{{ data.host_summary.total }}</div>
+                <div class="small mt-2 d-flex flex-wrap gap-1">
+                    <span class="vmp-tag vmp-tag-ok">开启 <span id="kpi-host-on">{{ data.host_summary.on }}</span></span>
+                    <span class="vmp-tag vmp-tag-bad">关闭 <span id="kpi-host-off">{{ data.host_summary.off }}</span></span>
+                    <span class="vmp-tag vmp-tag-warn">部分 <span id="kpi-host-partial">{{ data.host_summary.partial }}</span></span>
                 </div>
-                <div class="small mt-1 text-muted">
+                <div class="small mt-2 text-muted">
                     离线 <span id="kpi-host-offline">{{ data.host_summary.offline }}</span> ·
                     采集过期 <span id="kpi-host-stale">{{ data.host_summary.stale }}</span>
                 </div>
             </div>
         </div>
-    </div>
-    <div class="col-md mb-3">
-        <div class="card h-100">
-            <div class="card-body py-3">
-                <div class="text-muted small mb-2">今日事件</div>
-                <div class="fs-4 fw-bold" style="color:#5c7a4e;" id="kpi-today-allow">{{ data.today.allow }}</div>
-                <div class="small mt-1">
-                    <span class="badge bg-danger">DROP <span id="kpi-today-drop">{{ data.today.drop }}</span></span>
-                    <span class="badge bg-success">ALLOW <span id="kpi-today-allow2">{{ data.today.allow }}</span></span>
+        <div class="col-6 col-lg">
+            <div class="vmp-stat h-100 is-ok">
+                <div class="vmp-stat-label mb-2">今日事件</div>
+                <div class="vmp-stat-num" id="kpi-today-allow">{{ data.today.allow }}</div>
+                <div class="small mt-2 d-flex flex-wrap gap-1">
+                    <span class="vmp-tag vmp-tag-bad">DROP <span id="kpi-today-drop">{{ data.today.drop }}</span></span>
+                    <span class="vmp-tag vmp-tag-ok">ALLOW <span id="kpi-today-allow2">{{ data.today.allow }}</span></span>
                 </div>
             </div>
         </div>
-    </div>
-    <div class="col-md mb-3">
-        <div class="card h-100">
-            <div class="card-body py-3">
-                <div class="text-muted small mb-2">策略规则</div>
-                <div class="fs-4 fw-bold text-primary" id="kpi-rule-total">{{ data.rules.total }}</div>
-                <div class="small mt-1 text-muted">
+        <div class="col-6 col-lg">
+            <div class="vmp-stat h-100">
+                <div class="vmp-stat-label mb-2">策略规则</div>
+                <div class="vmp-stat-num text-primary" id="kpi-rule-total">{{ data.rules.total }}</div>
+                <div class="small mt-2 text-muted">
                     待下发 <span id="kpi-rule-pending">{{ data.rules.pending }}</span> ·
                     自动 <span id="kpi-rule-auto">{{ data.rules.auto }}</span> ·
                     临时 <span id="kpi-rule-temp">{{ data.rules.temporary }}</span>
@@ -58,25 +63,21 @@
                 </div>
             </div>
         </div>
-    </div>
-    <div class="col-md mb-3">
-        <div class="card h-100">
-            <div class="card-body py-3">
-                <div class="text-muted small mb-2">Ansible 任务</div>
-                <div class="fs-4 fw-bold" style="color:#4e7a72;" id="kpi-task-running">{{ data.tasks.running }}</div>
-                <div class="small mt-1">
-                    <span class="badge bg-success">成功 <span id="kpi-task-success">{{ data.tasks.success }}</span></span>
-                    <span class="badge bg-danger">失败 <span id="kpi-task-failed">{{ data.tasks.failed }}</span></span>
+        <div class="col-6 col-lg">
+            <div class="vmp-stat h-100">
+                <div class="vmp-stat-label mb-2">Ansible 任务</div>
+                <div class="vmp-stat-num" id="kpi-task-running" style="color: var(--vmp-info);">{{ data.tasks.running }}</div>
+                <div class="small mt-2 d-flex flex-wrap gap-1">
+                    <span class="vmp-tag vmp-tag-ok">成功 <span id="kpi-task-success">{{ data.tasks.success }}</span></span>
+                    <span class="vmp-tag vmp-tag-bad">失败 <span id="kpi-task-failed">{{ data.tasks.failed }}</span></span>
                 </div>
             </div>
         </div>
-    </div>
-    <div class="col-md mb-3">
-        <div class="card h-100">
-            <div class="card-body py-3">
-                <div class="text-muted small mb-2">风险概览</div>
-                <div class="fs-4 fw-bold text-danger" id="kpi-risk-high">{{ data.risk.high_events }}</div>
-                <div class="small mt-1 text-muted">
+        <div class="col-6 col-lg">
+            <div class="vmp-stat h-100 is-bad">
+                <div class="vmp-stat-label mb-2">风险概览</div>
+                <div class="vmp-stat-num" id="kpi-risk-high">{{ data.risk.high_events }}</div>
+                <div class="small mt-2 text-muted">
                     未知程序 <span id="kpi-risk-unknown">{{ data.risk.unknown_apps }}</span> ·
                     外联 <span id="kpi-risk-external">{{ data.risk.external_comms }}</span> ·
                     敏感端口 <span id="kpi-risk-sensitive">{{ data.risk.sensitive_ports }}</span>
@@ -84,83 +85,86 @@
             </div>
         </div>
     </div>
-</div>
 
-<!-- 24h 趋势 -->
-<div class="card mb-4">
-    <div class="card-header fw-bold">近 24 小时事件趋势（DROP / ALLOW）</div>
-    <div class="card-body">
-        <div id="trend-chart" style="width: 100%; height: 320px;"></div>
+    <!-- 24h 趋势 -->
+    <div class="card mb-4">
+        <div class="vmp-card-head">
+            <h2>近 24 小时事件趋势（DROP / ALLOW）</h2>
+            <span class="vmp-hint">DROP 为被防火墙拦下的连接，长期为零也可能是日志未开启</span>
+        </div>
+        <div class="card-body">
+            <div id="trend-chart" style="width: 100%; height: 320px;"></div>
+        </div>
     </div>
-</div>
 
-<!-- TOP 榜 -->
-<div class="row">
-    <div class="col-md-6 col-lg-3 mb-4">
-        <div class="card h-100">
-            <div class="card-header fw-bold">TOP 主机（事件数）</div>
-            <div class="card-body p-0">
-                <table class="table table-sm table-hover mb-0">
-                    <thead class="table-warm"><tr><th>主机</th><th class="text-end">次数</th></tr></thead>
-                    <tbody id="top-hosts">
-                    {% for name, n in data.top.hosts %}
-                        <tr><td>{{ name }}</td><td class="text-end">{{ n }}</td></tr>
-                    {% empty %}
-                        <tr><td colspan="2" class="empty-state py-3">暂无数据</td></tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
+    <!-- TOP 榜 -->
+    <div class="row">
+        <div class="col-md-6 col-lg-3 mb-4">
+            <div class="card h-100">
+                <div class="vmp-card-head"><h2>TOP 主机（事件数）</h2></div>
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover mb-0 vmp-table">
+                        <thead><tr><th>主机</th><th class="text-end">次数</th></tr></thead>
+                        <tbody id="top-hosts">
+                        {% for name, n in data.top.hosts %}
+                            <tr><td>{{ name }}</td><td class="text-end">{{ n }}</td></tr>
+                        {% empty %}
+                            <tr><td colspan="2" class="empty-state py-3">暂无数据</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
-    </div>
-    <div class="col-md-6 col-lg-3 mb-4">
-        <div class="card h-100">
-            <div class="card-header fw-bold">TOP 目标端口</div>
-            <div class="card-body p-0">
-                <table class="table table-sm table-hover mb-0">
-                    <thead class="table-warm"><tr><th>端口</th><th class="text-end">次数</th></tr></thead>
-                    <tbody id="top-ports">
-                    {% for p, n in data.top.ports %}
-                        <tr><td>{{ p }}</td><td class="text-end">{{ n }}</td></tr>
-                    {% empty %}
-                        <tr><td colspan="2" class="empty-state py-3">暂无数据</td></tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
+        <div class="col-md-6 col-lg-3 mb-4">
+            <div class="card h-100">
+                <div class="vmp-card-head"><h2>TOP 目标端口</h2></div>
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover mb-0 vmp-table">
+                        <thead><tr><th>端口</th><th class="text-end">次数</th></tr></thead>
+                        <tbody id="top-ports">
+                        {% for p, n in data.top.ports %}
+                            <tr><td>{{ p }}</td><td class="text-end">{{ n }}</td></tr>
+                        {% empty %}
+                            <tr><td colspan="2" class="empty-state py-3">暂无数据</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
-    </div>
-    <div class="col-md-6 col-lg-3 mb-4">
-        <div class="card h-100">
-            <div class="card-header fw-bold">TOP 目标 IP</div>
-            <div class="card-body p-0">
-                <table class="table table-sm table-hover mb-0">
-                    <thead class="table-warm"><tr><th>IP</th><th class="text-end">次数</th></tr></thead>
-                    <tbody id="top-ips">
-                    {% for ip, n in data.top.ips %}
-                        <tr><td>{{ ip }}</td><td class="text-end">{{ n }}</td></tr>
-                    {% empty %}
-                        <tr><td colspan="2" class="empty-state py-3">暂无数据</td></tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
+        <div class="col-md-6 col-lg-3 mb-4">
+            <div class="card h-100">
+                <div class="vmp-card-head"><h2>TOP 目标 IP</h2></div>
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover mb-0 vmp-table">
+                        <thead><tr><th>IP</th><th class="text-end">次数</th></tr></thead>
+                        <tbody id="top-ips">
+                        {% for ip, n in data.top.ips %}
+                            <tr><td>{{ ip }}</td><td class="text-end">{{ n }}</td></tr>
+                        {% empty %}
+                            <tr><td colspan="2" class="empty-state py-3">暂无数据</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
-    </div>
-    <div class="col-md-6 col-lg-3 mb-4">
-        <div class="card h-100">
-            <div class="card-header fw-bold">TOP 应用程序</div>
-            <div class="card-body p-0">
-                <table class="table table-sm table-hover mb-0">
-                    <thead class="table-warm"><tr><th>程序</th><th class="text-end">次数</th></tr></thead>
-                    <tbody id="top-apps">
-                    {% for app, n in data.top.apps %}
-                        <tr><td>{{ app }}</td><td class="text-end">{{ n }}</td></tr>
-                    {% empty %}
-                        <tr><td colspan="2" class="empty-state py-3">暂无数据</td></tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
+        <div class="col-md-6 col-lg-3 mb-4">
+            <div class="card h-100">
+                <div class="vmp-card-head"><h2>TOP 应用程序</h2></div>
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover mb-0 vmp-table">
+                        <thead><tr><th>程序</th><th class="text-end">次数</th></tr></thead>
+                        <tbody id="top-apps">
+                        {% for app, n in data.top.apps %}
+                            <tr><td>{{ app }}</td><td class="text-end">{{ n }}</td></tr>
+                        {% empty %}
+                            <tr><td colspan="2" class="empty-state py-3">暂无数据</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>

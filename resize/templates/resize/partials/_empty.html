@@ -1,0 +1,18 @@
+{% comment %}
+通用空态。用法：
+  {% include "resize/partials/_empty.html" with text="暂无数据" %}
+  {% include "resize/partials/_empty.html" with text="未采集到" hint="不代表无异常，可能是权限不足" %}
+
+hint 存在的意义：平台上很多"空"其实是"没采到"，不是"没有"。
+把这两件事在界面上区分开，是和采集侧"截断必须声明"同一条口径。
+{% endcomment %}
+<div class="empty-state">
+    <div class="mb-2">
+        <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" fill="currentColor"
+             viewBox="0 0 16 16" opacity=".45">
+            <path d="M4.4.532a1.5 1.5 0 0 1 2.322 0l.621.78a.5.5 0 0 0 .654.12l.901-.56a1.5 1.5 0 0 1 1.99.58l3.2 5.6a1.5 1.5 0 0 1-.5 2.05l-8.2 4.7a1.5 1.5 0 0 1-2.05-.5l-3.2-5.6a1.5 1.5 0 0 1 .5-2.05z"/>
+        </svg>
+    </div>
+    <div>{{ text|default:"暂无数据" }}</div>
+    {% if hint %}<div class="small mt-1" style="max-width:60ch;margin:0 auto;">{{ hint }}</div>{% endif %}
+</div>
