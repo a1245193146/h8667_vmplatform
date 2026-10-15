@@ -1,0 +1,166 @@
+{% extends "resize/base.html" %}
+{% load static %}
+
+{% block title %}执行留痕 - 系统管理{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+    <div class="vmp-page-head">
+        <div>
+            <h1>执行留痕</h1>
+            <p class="vmp-sub">
+                平台往服务器/控制机下发过的每一条命令。写入时已做凭据脱敏；
+                输出只留头尾，被截断的行会明确标注。
+            </p>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <span class="text-muted small">共 {{ page.paginator.count }} 条</span>
+            {% if is_admin %}
+            <form method="post" action="{% url 'sys_execlog_purge' %}"
+                  onsubmit="return confirm('按当前保留期清理过期留痕？\n探活类保留 7 天，其余保留 90 天。\n本次清理也会写入一条留痕。');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-secondary btn-sm">清理过期留痕</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <form method="get" class="vmp-filterbar">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-2">
+                <label class="form-label" for="f-module">来源模块</label>
+                <select class="form-select" id="f-module" name="module">
+                    <option value="">全部</option>
+                    {% for m in modules %}
+                    <option value="{{ m }}" {% if m == f_module %}selected{% endif %}>{{ m }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label" for="f-kind">命令类型</label>
+                <select class="form-select" id="f-kind" name="kind">
+                    <option value="">全部</option>
+                    {% for v, label in kinds %}
+                    <option value="{{ v }}" {% if v == f_kind %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label" for="f-status">结果</label>
+                <select class="form-select" id="f-status" name="status">
+                    <option value="">全部</option>
+                    <option value="not_success" {% if f_status == 'not_success' %}selected{% endif %}>非成功（失败/超时/异常）</option>
+                    {% for v, label in statuses %}
+                    <option value="{{ v }}" {% if v == f_status %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label" for="f-target">目标主机</label>
+                <input class="form-control" id="f-target" name="target" value="{{ f_target }}" placeholder="IP 或清单路径">
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="f-q">命令关键字</label>
+                <input class="form-control" id="f-q" name="q" value="{{ f_q }}" placeholder="如 Get-WinEvent / iptables">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label" for="f-start">开始日期</label>
+                <input class="form-control" type="date" id="f-start" name="start" value="{{ start }}">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label" for="f-end">结束日期</label>
+                <input class="form-control" type="date" id="f-end" name="end" value="{{ end }}">
+            </div>
+            <div class="col-12 col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">查询</button>
+                <a class="btn btn-outline-secondary btn-sm" href="{% url 'sys_execlogs' %}">重置</a>
+            </div>
+        </div>
+    </form>
+
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 vmp-table">
+                <thead>
+                <tr>
+                    <th style="width:132px;">时间</th>
+                    <th style="width:96px;">模块</th>
+                    <th style="width:130px;">类型</th>
+                    <th style="width:150px;">目标</th>
+                    <th>命令</th>
+                    <th style="width:64px;">退出码</th>
+                    <th style="width:76px;">结果</th>
+                    <th style="width:86px;">耗时</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for row in page %}
+                <tr class="vmp-row-click" data-vmp-toggle="#ex-{{ row.pk }}" aria-expanded="false"
+                    title="点击展开命令与输出预览">
+                    <td class="text-nowrap small">
+                        <a href="{% url 'sys_execlog_detail' row.pk %}">{{ row.created_at|date:"m-d H:i:s" }}</a>
+                    </td>
+                    <td class="small">{{ row.module }}</td>
+                    <td><span class="vmp-tag vmp-tag-info">{{ row.get_kind_display }}</span></td>
+                    <td class="small text-truncate" style="max-width:150px;" title="{{ row.target }}">{{ row.target|default:"-" }}</td>
+                    <td>
+                        <span class="vmp-code">{{ row.command|slice:":140" }}{% if row.command|length > 140 %}…{% endif %}</span>
+                        {% if row.truncated %}<span class="vmp-tag vmp-tag-warn ms-1">输出已截断</span>{% endif %}
+                    </td>
+                    <td class="small">{{ row.rc|default_if_none:"-" }}</td>
+                    <td>
+                        {% if row.status == 'success' %}
+                        <span class="vmp-tag vmp-tag-ok">成功</span>
+                        {% elif row.status == 'timeout' %}
+                        <span class="vmp-tag vmp-tag-warn">超时</span>
+                        {% else %}
+                        <span class="vmp-tag vmp-tag-bad">{{ row.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="small text-nowrap text-muted">{{ row.duration_ms }} ms</td>
+                </tr>
+                <tr class="vmp-row-detail" id="ex-{{ row.pk }}" hidden>
+                    <td colspan="8">
+                        <div class="vmp-row-detail-inner">
+                            <div class="small text-muted mb-2">
+                                发起人 <strong>{{ row.initiated_by|default:"system" }}</strong>
+                                · 输出共 {{ row.stdout_bytes }} 字符
+                                {% if row.task_ref %} · 关联 Ansible 任务 <span class="vmp-code">{{ row.task_ref }}</span>{% endif %}
+                                {% if row.note %} · 备注 {{ row.note }}{% endif %}
+                            </div>
+                            <pre class="vmp-code-block mb-2">{{ row.command }}</pre>
+                            {% if row.stdout %}
+                            <div class="small text-muted mb-1">输出预览（前 1200 字符）</div>
+                            <pre class="vmp-code-block" style="max-height:220px;">{{ row.stdout|slice:":1200" }}{% if row.stdout|length > 1200 %}
+
+…[预览到此为止，完整留存内容见详情页]…{% endif %}</pre>
+                            {% endif %}
+                            {% if row.stderr_tail %}
+                            <div class="small text-muted mb-1">错误输出尾部</div>
+                            <pre class="vmp-code-block" style="max-height:160px;">{{ row.stderr_tail }}</pre>
+                            {% endif %}
+                            <div class="mt-2">
+                                <a class="btn btn-outline-secondary btn-sm" href="{% url 'sys_execlog_detail' row.pk %}">查看完整留痕</a>
+                                <a class="btn btn-outline-secondary btn-sm" href="?target={{ row.target|urlencode }}">只看该目标</a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        {% include "resize/partials/_empty.html" with text="没有符合条件的执行留痕" hint="也可能是该模块还没跑过任务，或留痕已过保留期被清理（清理动作本身有一条留痕可查）。" %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="card-body pt-0">
+            {% include "resize/partials/_pagination.html" with page=page %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}

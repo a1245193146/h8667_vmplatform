@@ -1,0 +1,115 @@
+{% extends "resize/base.html" %}
+{% load static %}
+
+{% block title %}配置审计 - 系统管理{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+    <div class="vmp-page-head">
+        <div>
+            <h1>配置审计</h1>
+            <p class="vmp-sub">
+                配置项的每一次变更（含被拒绝的保存）。只记<strong>值的摘要</strong>：
+                凭据类只记长度不记内容，页面上任何位置都不会出现明文。
+            </p>
+        </div>
+        <div>
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'sys_config' %}">配置管理</a>
+        </div>
+    </div>
+
+    <form method="get" class="vmp-filterbar">
+        <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="f-key">配置键</label>
+                <input class="form-control" id="f-key" name="key" value="{{ f_key }}" placeholder="如 OPS_LLM_CONFIG">
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label" for="f-user">操作人</label>
+                <input class="form-control" id="f-user" name="username" value="{{ f_user }}">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label" for="f-start">开始日期</label>
+                <input class="form-control" type="date" id="f-start" name="start" value="{{ start }}">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label" for="f-end">结束日期</label>
+                <input class="form-control" type="date" id="f-end" name="end" value="{{ end }}">
+            </div>
+            <div class="col-6 col-md-1 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">查询</button>
+                <a class="btn btn-outline-secondary btn-sm" href="{% url 'sys_config_audit' %}" title="重置">重置</a>
+            </div>
+        </div>
+    </form>
+
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 vmp-table">
+                <thead>
+                <tr>
+                    <th style="width:150px;">时间</th>
+                    <th style="width:120px;">操作人</th>
+                    <th style="width:32%;">配置键</th>
+                    <th style="width:96px;">动作</th>
+                    <th>原值摘要</th>
+                    <th>新值摘要</th>
+                    <th style="width:80px;">结果</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for row in page %}
+                <tr class="vmp-row-click" data-vmp-toggle="#au-{{ row.pk }}" aria-expanded="false"
+                    {% if row.detail %}title="点击展开说明"{% endif %}>
+                    <td class="text-nowrap small">{{ row.created_at|date:"Y-m-d H:i:s" }}</td>
+                    <td class="small">{{ row.username }}</td>
+                    <td><span class="vmp-code">{{ row.key }}</span></td>
+                    <td>
+                        {% if row.action == 'reset' %}
+                        <span class="vmp-tag vmp-tag-mute">恢复默认</span>
+                        {% elif row.action == 'delete' %}
+                        <span class="vmp-tag vmp-tag-bad">删除</span>
+                        {% elif row.action == 'create' %}
+                        <span class="vmp-tag vmp-tag-info">新增</span>
+                        {% else %}
+                        <span class="vmp-tag vmp-tag-warn">修改</span>
+                        {% endif %}
+                    </td>
+                    <td class="small text-muted">{{ row.old_display|default:"-" }}</td>
+                    <td class="small">{{ row.new_display|default:"-" }}</td>
+                    <td>
+                        {% if row.result == 'success' %}
+                        <span class="vmp-tag vmp-tag-ok">成功</span>
+                        {% else %}
+                        <span class="vmp-tag vmp-tag-bad">{{ row.result }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% if row.detail %}
+                <tr class="vmp-row-detail" id="au-{{ row.pk }}" hidden>
+                    <td colspan="7">
+                        <div class="vmp-row-detail-inner small">
+                            <div class="text-muted mb-1">说明</div>
+                            <div>{{ row.detail }}</div>
+                        </div>
+                    </td>
+                </tr>
+                {% endif %}
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        {% include "resize/partials/_empty.html" with text="没有符合条件的配置变更" hint="配置从未被改过时这里是空的——这属于正常状态，不代表审计功能失效。" %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="card-body pt-0">
+            {% include "resize/partials/_pagination.html" with page=page %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}

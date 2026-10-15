@@ -1,0 +1,136 @@
+{% extends "resize/base.html" %}
+{% load static %}
+
+{% block title %}留痕 #{{ row.pk }} - 系统管理{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+    <div class="vmp-page-head">
+        <div>
+            <h1>执行留痕 #{{ row.pk }}</h1>
+            <p class="vmp-sub">
+                {{ row.created_at|date:"Y-m-d H:i:s" }} ·
+                <span class="vmp-tag vmp-tag-info">{{ row.get_kind_display }}</span>
+                {% if row.status == 'success' %}
+                <span class="vmp-tag vmp-tag-ok">成功</span>
+                {% elif row.status == 'timeout' %}
+                <span class="vmp-tag vmp-tag-warn">超时</span>
+                {% else %}
+                <span class="vmp-tag vmp-tag-bad">{{ row.get_status_display }}</span>
+                {% endif %}
+            </p>
+        </div>
+        <div>
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'sys_execlogs' %}">返回列表</a>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="vmp-card-head"><h2>基本信息</h2></div>
+        <div class="card-body">
+            <dl class="row mb-0 small">
+                <dt class="col-sm-3 col-lg-2 text-muted fw-normal">来源模块</dt>
+                <dd class="col-sm-9 col-lg-4">{{ row.module }}</dd>
+                <dt class="col-sm-3 col-lg-2 text-muted fw-normal">命令类型</dt>
+                <dd class="col-sm-9 col-lg-4">{{ row.get_kind_display }}（<span class="vmp-code">{{ row.kind }}</span>）</dd>
+
+                <dt class="col-sm-3 col-lg-2 text-muted fw-normal">目标</dt>
+                <dd class="col-sm-9 col-lg-4">{{ row.target|default:"-" }}</dd>
+                <dt class="col-sm-3 col-lg-2 text-muted fw-normal">发起人</dt>
+                <dd class="col-sm-9 col-lg-4">{{ row.initiated_by|default:"system" }}</dd>
+
+                <dt class="col-sm-3 col-lg-2 text-muted fw-normal">退出码</dt>
+                <dd class="col-sm-9 col-lg-4">{{ row.rc|default_if_none:"（未取得——连不上控制机或超时）" }}</dd>
+                <dt class="col-sm-3 col-lg-2 text-muted fw-normal">耗时</dt>
+                <dd class="col-sm-9 col-lg-4">{{ row.duration_ms }} ms</dd>
+
+                <dt class="col-sm-3 col-lg-2 text-muted fw-normal">输出规模</dt>
+                <dd class="col-sm-9 col-lg-4">
+                    原始 {{ row.stdout_bytes }} 字符
+                    {% if row.truncated %}
+                    <span class="vmp-tag vmp-tag-warn ms-1">已截断，只留头尾</span>
+                    {% else %}
+                    <span class="vmp-tag vmp-tag-mute ms-1">完整留存</span>
+                    {% endif %}
+                </dd>
+                <dt class="col-sm-3 col-lg-2 text-muted fw-normal">备注</dt>
+                <dd class="col-sm-9 col-lg-4">{{ row.note|default:"-" }}</dd>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="vmp-card-head">
+            <h2>命令原文</h2>
+            <span class="vmp-hint">已脱敏：password/token/secret/Authorization 等一律替换为 ***</span>
+        </div>
+        <div class="card-body">
+            <pre class="vmp-code-block">{{ row.command }}</pre>
+            {% if row.command|length >= 4000 %}
+            <div class="vmp-truncated">命令原文超过 4000 字符，中间部分未留存（此处显示的是头尾）。</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="vmp-card-head"><h2>标准输出</h2><span class="vmp-hint">头尾各留一部分</span></div>
+        <div class="card-body">
+            {% if row.stdout %}
+            <pre class="vmp-code-block">{{ row.stdout }}</pre>
+            {% if row.truncated %}
+            <div class="vmp-truncated">
+                输出原始长度 {{ row.stdout_bytes }} 字符，超出留存上限，中间部分<strong>未留存</strong>——
+                上面看到的不是全部。需要完整输出请到控制机重跑该命令，或缩短采集范围后重试。
+            </div>
+            {% endif %}
+            {% else %}
+            {% include "resize/partials/_empty.html" with text="该命令没有标准输出" hint="空输出不等于成功，请结合退出码与错误输出判断。" %}
+            {% endif %}
+        </div>
+    </div>
+
+    {% if row.stderr_tail %}
+    <div class="card mb-3">
+        <div class="vmp-card-head"><h2>错误输出（尾部）</h2></div>
+        <div class="card-body">
+            <pre class="vmp-code-block">{{ row.stderr_tail }}</pre>
+            <div class="vmp-truncated">
+                只留存尾部 2048 字符——ansible 的 fatal 行几乎总在最后，前面的进度输出价值低。
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if task %}
+    <div class="card mb-3">
+        <div class="vmp-card-head"><h2>关联的 Ansible 任务</h2><span class="vmp-hint">task_ref {{ row.task_ref }}</span></div>
+        <div class="card-body small">
+            <dl class="row mb-0">
+                <dt class="col-sm-3 text-muted fw-normal">任务名</dt>
+                <dd class="col-sm-9">{{ task.name|default:"-" }}</dd>
+                <dt class="col-sm-3 text-muted fw-normal">状态</dt>
+                <dd class="col-sm-9">{{ task.get_status_display|default:task.status }}</dd>
+                <dt class="col-sm-3 text-muted fw-normal">创建时间</dt>
+                <dd class="col-sm-9">{{ task.created_at|date:"Y-m-d H:i:s" }}</dd>
+            </dl>
+            <p class="text-muted mb-0 mt-2">
+                AnsibleTaskRecord 是"一次 playbook 任务"的业务记录，本条留痕是"一条命令"的技术记录，两者互补。
+            </p>
+        </div>
+    </div>
+    {% elif row.task_ref %}
+    <div class="alert alert-warning small">
+        本条留痕记录了 task_ref <span class="vmp-code">{{ row.task_ref }}</span>，
+        但在 AnsibleTaskRecord 里没找到对应任务（可能已被清理）。
+    </div>
+    {% endif %}
+
+    <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'sys_execlogs' %}?target={{ row.target|urlencode }}">同目标的全部留痕</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'sys_execlogs' %}?module={{ row.module|urlencode }}">同模块的全部留痕</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'sys_execlogs' %}?status=not_success">全部非成功留痕</a>
+    </div>
+
+</div>
+{% endblock %}

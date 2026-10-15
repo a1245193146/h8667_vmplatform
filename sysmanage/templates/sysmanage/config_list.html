@@ -1,0 +1,146 @@
+{% extends "resize/base.html" %}
+{% load static %}
+
+{% block title %}配置管理 - 系统管理{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+    <div class="vmp-page-head">
+        <div>
+            <h1>配置管理</h1>
+            <p class="vmp-sub">
+                白名单内的 {{ total_editable }} 项可在此修改，其中
+                <strong>{{ overridden }}</strong> 项已被数据库覆盖、其余仍用 settings 出厂默认值。
+                保存后 Web 进程立即生效；Celery 进程由 beat 每 10 分钟回写一次，重启后立即生效。
+            </p>
+        </div>
+        <div>
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'sys_config_audit' %}">配置审计</a>
+        </div>
+    </div>
+
+    {% if not db_ok %}
+    <div class="alert alert-danger">
+        <strong>读不到配置表。</strong>请先在服务器上执行 <span class="vmp-code">python manage.py migrate sysmanage</span> 后重启 Web 服务。<br>
+        <span class="small text-muted">原始错误：{{ db_error }}</span>
+    </div>
+    {% endif %}
+
+    {% if not is_admin %}
+    <div class="alert alert-info small">
+        当前账号不是管理员，本页<strong>只读</strong>：可以看到每项的生效值与默认值，但改不了。
+        需要修改请联系管理员。
+    </div>
+    {% endif %}
+
+    <div class="alert alert-secondary small mb-4">
+        <strong>三条口径</strong>
+        <ol class="mb-0 mt-1 ps-3">
+            <li>
+                <strong>凭据类只写不读</strong>：标了
+                <span class="vmp-tag vmp-tag-bad">凭据</span>
+                的项页面永不回显明文，输入框留空提交表示"不改"，填了才覆盖。
+            </li>
+            <li>
+                <strong>恢复默认是真的恢复</strong>：点"恢复默认"会删掉数据库覆盖，
+                settings 里的出厂值会重新写回进程（不是只把输入框清空）。
+            </li>
+            <li>
+                <strong>白名单外的键不在本页</strong>：<span class="vmp-code">SECRET_KEY</span>、
+                <span class="vmp-code">DATABASES</span> 等一律拒绝写入；
+                <span class="vmp-code">MAX_TOKENS</span> / <span class="vmp-code">BATCH_MAX_TOKENS</span> /
+                <span class="vmp-code">MERGE_MAX_TOKENS</span> 三项<strong>刻意不开放</strong>——
+                内网模型是思考型，给了正数上限就会返回空 content 但 HTTP 200，
+                这个坑已经踩过一次，不再把它递到运维手里。
+            </li>
+        </ol>
+    </div>
+
+    {% for label, group, items in groups %}
+    <div class="card mb-3">
+        <div class="vmp-card-head">
+            <h2>{{ label }}</h2>
+            <span class="vmp-hint">{{ items|length }} 项 · group={{ group }}</span>
+        </div>
+        <div class="card-body">
+            {% for item in items %}
+            <div class="{% if not forloop.last %}border-bottom pb-3 mb-3{% endif %}">
+                <div class="row g-3 align-items-start">
+                    <div class="col-lg-7">
+                        <div class="fw-semibold small">
+                            <span class="vmp-code">{{ item.key }}</span>
+                            {% if item.is_secret %}<span class="vmp-tag vmp-tag-bad ms-1">凭据</span>{% endif %}
+                            {% if item.has_override %}
+                            <span class="vmp-tag vmp-tag-warn ms-1">已覆盖</span>
+                            {% else %}
+                            <span class="vmp-tag vmp-tag-mute ms-1">默认</span>
+                            {% endif %}
+                            <span class="vmp-tag vmp-tag-info ms-1">{{ item.value_type }}</span>
+                        </div>
+                        <div class="small text-muted mt-1">{{ item.desc }}</div>
+                        <div class="small mt-1">
+                            生效值：<span class="vmp-code">{{ item.display }}</span>
+                            <span class="text-muted ms-2">默认：<span class="vmp-code">{{ item.default_display }}</span></span>
+                        </div>
+                        {% if item.updated_by %}
+                        <div class="small text-muted mt-1">
+                            最后修改：{{ item.updated_by }}
+                            {% if item.updated_at %}· {{ item.updated_at|date:"Y-m-d H:i" }}{% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    {% if is_admin %}
+                    <div class="col-lg-5">
+                        <div class="d-flex gap-2 align-items-start flex-wrap">
+                            <form method="post" action="{% url 'sys_config_save' %}" class="d-flex gap-2 align-items-start flex-grow-1">
+                                {% csrf_token %}
+                                <input type="hidden" name="key" value="{{ item.key }}">
+                                <div class="flex-grow-1">
+                                    {% if item.value_type == 'bool' %}
+                                    <select class="form-select form-select-sm" name="value" aria-label="{{ item.key }}">
+                                        <option value="true" {% if item.form_value == 'true' %}selected{% endif %}>true（开）</option>
+                                        <option value="false" {% if item.form_value == 'false' %}selected{% endif %}>false（关）</option>
+                                    </select>
+                                    {% elif item.value_type == 'int' %}
+                                    <input class="form-control form-control-sm" type="number" step="1" name="value"
+                                           value="{{ item.form_value }}" aria-label="{{ item.key }}">
+                                    {% elif item.value_type == 'float' %}
+                                    <input class="form-control form-control-sm" type="number" step="any" name="value"
+                                           value="{{ item.form_value }}" aria-label="{{ item.key }}">
+                                    {% else %}
+                                    <input class="form-control form-control-sm {% if item.is_secret %}vmp-secret-input{% endif %}"
+                                           type="text" name="value" autocomplete="off" spellcheck="false"
+                                           value="{{ item.form_value }}" aria-label="{{ item.key }}"
+                                           {% if item.is_secret %}placeholder="留空表示不修改"{% endif %}>
+                                    {% endif %}
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-sm text-nowrap">保存</button>
+                            </form>
+                            {% if item.has_override %}
+                            <form method="post" action="{% url 'sys_config_reset' %}"
+                                  onsubmit="return confirm('删除 {{ item.key }} 的数据库覆盖，恢复 settings 默认值？');">
+                                {% csrf_token %}
+                                <input type="hidden" name="key" value="{{ item.key }}">
+                                <button type="submit" class="btn btn-outline-secondary btn-sm text-nowrap">恢复默认</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% empty %}
+    <div class="card">
+        <div class="card-body">
+            {% include "resize/partials/_empty.html" with text="没有可编辑的配置项" hint="通常是 sysmanage 未 migrate 或 EDITABLE 白名单为空。" %}
+        </div>
+    </div>
+    {% endfor %}
+
+</div>
+{% endblock %}

@@ -1,0 +1,115 @@
+{% extends "resize/base.html" %}
+{% load static %}
+
+{% block title %}系统管理 - 信息系统运维平台{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+    <div class="vmp-page-head">
+        <div>
+            <h1>系统管理</h1>
+            <p class="vmp-sub">
+                平台"自己做了什么"的可追溯层：凡经控制机下发到服务器的命令都会留痕，
+                凡在页面上改过的配置都会审计。业务模块（防火墙/病毒/运维分析）只往里写，不依赖它。
+            </p>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg">
+            <div class="vmp-stat h-100">
+                <div class="vmp-stat-num">{{ exec_total }}</div>
+                <div class="vmp-stat-label">累计执行留痕</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg">
+            <div class="vmp-stat h-100">
+                <div class="vmp-stat-num">{{ exec_day }}</div>
+                <div class="vmp-stat-label">近 24 小时执行</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg">
+            <div class="vmp-stat h-100 {% if exec_failed_day %}is-bad{% else %}is-ok{% endif %}">
+                <div class="vmp-stat-num">{{ exec_failed_day }}</div>
+                <div class="vmp-stat-label">近 24 小时非成功</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg">
+            <div class="vmp-stat h-100 {% if config_overridden %}is-warn{% endif %}">
+                <div class="vmp-stat-num">{{ config_overridden }}</div>
+                <div class="vmp-stat-label">已覆盖的配置项</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg">
+            <div class="vmp-stat h-100">
+                <div class="vmp-stat-num">{{ audit_day }}</div>
+                <div class="vmp-stat-label">近 24 小时配置变更</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="vmp-card-head">
+                    <h2>执行留痕</h2>
+                    <span class="vmp-hint">命令级</span>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-3">
+                        playbook、ansible 临时命令、控制机 shell、探活、SFTP 脚本同步——
+                        每条都记命令原文、退出码、耗时与头尾输出，写入时已做凭据脱敏。
+                        输出过长会截断，<strong>截断一定在页面上声明</strong>，不会静默丢。
+                    </p>
+                    <a class="btn btn-outline-secondary btn-sm" href="{% url 'sys_execlogs' %}">查看留痕</a>
+                    <a class="btn btn-outline-secondary btn-sm" href="{% url 'sys_execlogs' %}?status=not_success">只看非成功</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="vmp-card-head">
+                    <h2>配置管理</h2>
+                    <span class="vmp-hint">白名单内</span>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-3">
+                        大模型地址与超时、采集上限、控制机账号等可在页面上改，
+                        保存后写回 settings（Web 进程立即生效，Celery 由 beat 每 10 分钟回写）。
+                        凭据类<strong>只写不读</strong>：页面永不回显明文，输入框留空即表示不改。
+                    </p>
+                    <a class="btn btn-outline-secondary btn-sm" href="{% url 'sys_config' %}">打开配置页</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="vmp-card-head">
+                    <h2>配置审计</h2>
+                    <span class="vmp-hint">长期保留</span>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-3">
+                        谁在什么时候把哪个键从什么改成了什么。只记<strong>值的摘要</strong>，
+                        凭据只记长度不记内容。被拒绝的保存（非白名单键、类型不合法）同样留一条。
+                    </p>
+                    <a class="btn btn-outline-secondary btn-sm" href="{% url 'sys_config_audit' %}">查看审计</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mt-3">
+        <div class="card-body small text-muted">
+            <strong class="text-body">留痕的保留期</strong>：探活/探测类量大且事后价值低，默认保留
+            7 天；playbook、ansible、控制机 shell 默认保留 90 天。两个天数都在配置管理页可调。
+            清理由 Celery beat 每天 01:30 执行，也可在留痕列表页手动触发——
+            <strong class="text-body">清理动作本身也会写一条留痕</strong>，"删了什么"同样可查。
+        </div>
+    </div>
+
+</div>
+{% endblock %}
