@@ -63,10 +63,147 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'firewall.tasks.lifecycle.analyze_candidates_task',
         'schedule': crontab(hour=3, minute=0),
     },
+    # 病毒检测与隔离模块：定时采集各主机 Defender 检测事件（断点续采）
+    'av-collect-all-hosts': {
+        'task': 'antivirus.tasks.collection.collect_all_hosts_task',
+        'schedule': crontab(minute='*/30'),
+    },
+    # 运维分析模块：每日只读发现服务关联（nginx/jenkins/supervisor → 候选登记）
+    'ops-discover-services': {
+        'task': 'opsanalysis.tasks.discovery.run_discover_task',
+        'schedule': crontab(hour=4, minute=0),
+    },
+    # 系统管理：把库里的配置覆盖收敛到长驻的 Celery worker
+    # （保存配置时只 apply 了当前 web 进程，worker 不重启就吃不到新值）
+    'sys-reapply-config': {
+        'task': 'sysmanage.tasks.reapply_config_task',
+        'schedule': crontab(minute='*/10'),
+    },
+    # 系统管理：按保留期清理执行留痕（探活类短保留、运维命令长保留）
+    'sys-purge-execlog': {
+        'task': 'sysmanage.tasks.purge_execlog_task',
+        'schedule': crontab(hour=1, minute=30),
+    },
 }
 
 # 防火墙模块：内网网段前缀（用于外部IP判定），可按企业实际补充
 FW_INTERNAL_CIDRS = ['10.', '172.16.', '192.168.', '127.', '169.254.']
+
+# 病毒检测与隔离模块：UNC 隔离留存根目录（如 \\文件服务器\AV-Quarantine）。
+# 留存时按 {ROOT}\YYYY\MM\DD\{事件ID} 自动建目录；该目录须配置严格 NTFS + 共享权限，
+# 普通用户不得访问。为空则留存动作会因目标目录非法而失败（安全默认：不静默写本地）。
+AV_QUARANTINE_ROOT = os.environ.get('AV_QUARANTINE_ROOT', '')
+# Defender 事件日志源与关注的事件ID（供采集脚本参照；脚本内已内置同等默认值）。
+AV_EVENT_LOG_NAME = 'Microsoft-Windows-Windows Defender/Operational'
+AV_EVENT_IDS = [1116, 1117, 1118, 1119]
+
+# ===== 病毒检测采集白名单 =====
+# 只有 IP 列在这里的 Windows 服务器才会被采集病毒事件；定时任务与前端"立即采集"
+# 都只针对此列表。新增机器时把它的 IP 加进来即可（该机须已存在于 FirewallHost
+# 且 enabled=True）。列表为空时不采集任何主机（安全默认：绝不误采全网）。
+# 也可用环境变量 AV_COLLECT_HOST_IPS 覆盖（逗号分隔），便于不改代码调整。
+AV_COLLECT_HOST_IPS = [
+    ip.strip()
+    for ip in os.environ.get('AV_COLLECT_HOST_IPS', '192.168.2.109').split(',')
+    if ip.strip()
+]
+
+# ===== 运维分析：服务关联自动发现配置 =====
+# 第一阶段一切只读：仅读取 nginx.conf / jenkins config.xml / supervisor 配置，
+# 绝不 reload nginx、绝不触发构建、绝不 start/stop/restart supervisor program。
+# 三处发现源以 ip:port 为连接键聚合成 ServiceRegistry 候选，人工确认后转正。
+# 主机 IP 均可用环境变量覆盖；留空则该发现源被跳过（安全默认：不猜主机）。
+# NGINX_HOST 默认取既有 domain 模块使用的 nginxWebUI/反代服务器 192.168.2.250。
+OPS_DISCOVERY_CONFIG = {
+    # 控制机(10.2.20.226)上 ops playbook/脚本的存放根目录；运行前由程序自动 SFTP 同步，
+    # 无需人工复制。playbook 放根目录，脚本放 scripts/、PowerShell 放 powershell/ 子目录。
+    'REMOTE_BASE': os.environ.get('VMP_OPS_REMOTE_BASE', '/etc/ansible/playbooks/opsanalysis'),
+    # Nginx 服务器与其主配置（domain 模块已知反代/WebUI 在 192.168.2.250）
+    'NGINX_HOST': os.environ.get('VMP_OPS_NGINX_HOST', '192.168.2.250'),
+    'NGINX_CONF': os.environ.get('VMP_OPS_NGINX_CONF', '/usr/lib/nginx/conf/nginx.conf'),
+    # Jenkins 服务器与其 jobs 目录（未配置 JENKINS_HOST 则跳过 Jenkins 发现源）
+    'JENKINS_HOST': os.environ.get('VMP_OPS_JENKINS_HOST', ''),
+    'JENKINS_JOBS_DIR': os.environ.get('VMP_OPS_JENKINS_JOBS_DIR', '/var/lib/jenkins/jobs'),
+    # 服务故障排查(P5)：DNS 探测机（留空则回退用 NGINX_HOST 作为探测机）
+    'PROBE_HOST': os.environ.get('VMP_OPS_PROBE_HOST', ''),
+    # 内网 DNS 服务器（逗号分隔），排查时逐台解析核对；脚本内亦有同等默认值
+    'DNS_SERVERS': os.environ.get(
+        'VMP_OPS_DNS_SERVERS', '192.168.2.86,192.168.2.66,192.168.2.105'),
+    # 发现走 Ansible 控制机执行，默认用 [centos7.9]/[linux] 所在的 hosts inventory
+    'INVENTORY': os.environ.get('VMP_OPS_INVENTORY', 'hosts'),
+    # Windows 目标单独用 windows_dynamic.ini（winrm），与 Linux 的 hosts 分开下发
+    'WINDOWS_INVENTORY': os.environ.get(
+        'VMP_OPS_WINDOWS_INVENTORY', 'inventory.d/windows_dynamic.ini'),
+    # supervisor 扫描范围：默认=从 nginx/jenkins 发现的部署 IP 集合（自动界定，避免全网扫描）；
+    # 也可用逗号分隔的 VMP_OPS_SUPERVISOR_HOSTS 显式指定要扫描 supervisor 的应用机。
+    'SUPERVISOR_HOSTS': [
+        ip.strip()
+        for ip in os.environ.get('VMP_OPS_SUPERVISOR_HOSTS', '').split(',')
+        if ip.strip()
+    ],
+    # supervisor Web 面板：**每台应用服务器**(自动发现的 server_ips)本机都跑 supervisor
+    # 并监控其上的多个自开系统服务，面板端口统一 9999。故 URL 按每台 server_ip 逐台拼：
+    #   面板首页 http://{server_ip}:9999   程序日志 http://{server_ip}:9999/logtail/{程序名}
+    # 面板用 HTTP Basic Auth（浏览器首次访问弹登录框）。
+    'SUPERVISOR_WEB_SCHEME': os.environ.get('VMP_OPS_SUPERVISOR_SCHEME', 'http'),
+    'SUPERVISOR_WEB_PORT': int(os.environ.get('VMP_OPS_SUPERVISOR_PORT', '9999')),
+    # 服务端抓取 logtail 用的面板账号。隔离内网、允许硬编码；也可用环境变量覆盖。
+    # ↓↓↓ 把面板用户名/密码填到下面两个默认值里（或设 VMP_OPS_SUPERVISOR_USER/PASS）↓↓↓
+    'SUPERVISOR_WEB_USER': os.environ.get('VMP_OPS_SUPERVISOR_USER', ''),
+    'SUPERVISOR_WEB_PASS': os.environ.get('VMP_OPS_SUPERVISOR_PASS', ''),
+    # 影响分析/故障排查顺带采集"近 N 日操作系统日志"（重启/服务失败/OOM/sudo/补丁等，只读）。
+    # Windows 与 Linux 采集器输出结构一致(data.os_logs)，上层分析无需区分 OS。
+    'OS_LOG_DAYS': int(os.environ.get('VMP_OPS_OS_LOG_DAYS', '1')),
+}
+
+
+# 内网大模型辅助分析（OpenAI 兼容 /v1/chat/completions，如 vLLM）。
+# 只用于"故障排查/影响分析"结果页的手动按钮，模型输出仅作推测/建议参考，不写入事实、
+# 不触发任何执行动作；提示词里的证据统一脱敏，不含任何账号密码。
+OPS_LLM_CONFIG = {
+    # 关掉后页面上的按钮会说明原因，不影响原有采集与规则分析
+    'ENABLED': os.environ.get('VMP_OPS_LLM_ENABLED', 'true').lower() == 'true',
+    'BASE_URL': os.environ.get('VMP_OPS_LLM_URL', 'http://10.2.20.173:8001/v1/chat/completions'),
+    'MODEL': os.environ.get('VMP_OPS_LLM_MODEL', 'Qwen3.6-35B-A3B-AWQ-4bit'),
+    # 内网自建服务一般不校验 key；如需鉴权在此填或设 VMP_OPS_LLM_KEY
+    'API_KEY': os.environ.get('VMP_OPS_LLM_KEY', ''),
+    'TEMPERATURE': float(os.environ.get('VMP_OPS_LLM_TEMP', '0.2')),
+    # 35B 模型首字较慢，超时留足；超时只降级为"模型不可用"，不影响主流程
+    'TIMEOUT': int(os.environ.get('VMP_OPS_LLM_TIMEOUT', '180')),
+    # 下面三个 max_tokens 默认 0 = 请求体里不发这个字段，跟随服务端默认。
+    # 别改成正数：Qwen3 系是思考型模型，先写 reasoning_content 再写 content，
+    # 一旦输出上限被思考阶段吃光，content 就是空串而 HTTP 仍是 200，
+    # 页面会报"模型返回空内容"。厂内验证过的成功调用体里就没有 max_tokens。
+    'MAX_TOKENS': int(os.environ.get('VMP_OPS_LLM_MAX_TOKENS', '0')),
+    # 单批送进模型的证据字数上限；证据更多时按段落优先级分批问，最后再汇总一次。
+    # 经验值：中文约 1 字 ≈ 1 token，"MAX_CHARS + 提示词(约 2500 字)"要远小于模型上下文窗口。
+    'MAX_CHARS': int(os.environ.get('VMP_OPS_LLM_MAX_CHARS', '12000')),
+    # 分批上限：一次点击最多产生 MAX_BATCHES 次分析 + 1 次汇总。
+    # Celery -P solo 下单 worker 会被独占至多 (MAX_BATCHES+1)*TIMEOUT 秒，故不宜调大。
+    'MAX_BATCHES': int(os.environ.get('VMP_OPS_LLM_MAX_BATCHES', '3')),
+    # 每批/汇总回答的输出上限，同样默认 0（不发）。理由见 MAX_TOKENS。
+    'BATCH_MAX_TOKENS': int(os.environ.get('VMP_OPS_LLM_BATCH_MAX_TOKENS', '0')),
+    'MERGE_MAX_TOKENS': int(os.environ.get('VMP_OPS_LLM_MERGE_MAX_TOKENS', '0')),
+    # 可选：True 时请求体加 chat_template_kwargs.enable_thinking=false，让模型跳过思考
+    # 直接作答（更快，也彻底避开"思考吃光输出上限"）。默认 False = 与验证过的调用体一致；
+    # 若服务端不认这个字段会返回 400，那就保持 False。
+    'DISABLE_THINKING': os.environ.get('VMP_OPS_LLM_DISABLE_THINKING', 'false').lower() == 'true',
+    # 注：上面 MAX_TOKENS / BATCH_MAX_TOKENS / MERGE_MAX_TOKENS 三项刻意没有登记进
+    # 前端可编辑白名单（sysmanage.services.config.EDITABLE）。理由见那里的注释：
+    # 思考型模型给了正数上限就会返回空 content + HTTP 200，这个坑已经踩过一次。
+}
+
+
+# ---------------------------------------------------------------- 系统管理模块
+# 下面这些值都可以从「系统管理 → 配置管理」页面在线修改：数据库里的覆盖值会在
+# 进程启动时与每 10 分钟由 Celery 写回 settings（见 sysmanage.services.config），
+# 所以这里的 os.environ.get(...) 只是"出厂默认值"，不是唯一来源。
+# 执行留痕保留天数：playbook/ansible/shell/sync 长保留，探活(ping)量大短保留。
+SYS_EXECLOG_KEEP_DAYS = int(os.environ.get('VMP_SYS_EXECLOG_KEEP_DAYS', '90'))
+SYS_EXECLOG_PROBE_KEEP_DAYS = int(os.environ.get('VMP_SYS_EXECLOG_PROBE_DAYS', '7'))
+# 首页拓扑大屏的主动探活周期（分钟）
+SYS_PROBE_INTERVAL_MIN = int(os.environ.get('VMP_SYS_PROBE_INTERVAL_MIN', '5'))
+
 
 # 防火墙模块：主机同步读取的 Ansible inventory 文件路径（Ansible 服务器上）。
 # 默认为 /etc/ansible/hosts；若 [windows] 组在其他文件（如动态 inventory），在此指定：
@@ -94,7 +231,8 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 VCENTER_CONFIG = {
-    'HOST': "x.x.2.40",
+    # 生产环境请通过环境变量覆盖；若填主机名解析不了(getaddrinfo failed)，改用 vCenter 的 IP
+    'HOST': os.environ.get('VMP_VCENTER_HOST', "x.x.2.40"),
     # 生产环境请通过环境变量覆盖
     'USERNAME': os.environ.get('VMP_VCENTER_USERNAME', "administrator@vsphere.local"),
     # 生产环境请通过环境变量覆盖
@@ -111,6 +249,17 @@ ANSIBLE_CONFIG = {
     'PLAYBOOK': 'playbooks/windows_extend.yml',
     'windows_list': 'inventory.d/windows_dynamic.ini',
     'INVENTORY': 'hosts',
+    # firewall/antivirus 模块的 playbook 在控制机上的子目录（相对 WORKDIR）。
+    # 现网布局：/etc/ansible/playbooks/firewall/*.yml + /etc/ansible/playbooks/powershell/*.ps1
+    # run_playbook 默认用它拼路径；本地 firewall/ansible、firewall/powershell 会被自动同步到此。
+    'PLAYBOOK_SUBDIR': os.environ.get('VMP_ANSIBLE_PLAYBOOK_SUBDIR', 'playbooks/firewall'),
+    # 系统 ansible 需挂 venv 的 site-packages 才能加载 pywinrm 等 WinRM 连接插件，
+    # 否则连 Windows 报 unreachable。与 resize.services.ansible_service 用同一 venv 路径。
+    # 留空则不加 export（控制机 ansible 自带依赖时）。
+    'PYTHONPATH': os.environ.get(
+        'VMP_ANSIBLE_PYTHONPATH', '/opt/venv/lib/python3.12/site-packages'),
+    # ansible-playbook 可执行文件（默认系统路径，与 resize 一致）。
+    'PLAYBOOK_BIN': os.environ.get('VMP_ANSIBLE_PLAYBOOK_BIN', '/usr/bin/ansible-playbook'),
 }
 
 # Windows 服务器授权登录（AD 域控）配置
@@ -148,6 +297,14 @@ INSTALLED_APPS = [
     'resize',
     'domain',
     'firewall',
+    'antivirus',
+    'opsanalysis',
+    # 服务器运维：可写的批量执行器。刻意与 opsanalysis 分开——后者全程只读，
+    # 把"能删东西"的模块塞进去会让那条只读红线失去边界（详见 serverops/models.py）
+    'serverops',
+    # 放最后：sysmanage.apps.ready() 要把库里的配置覆盖写回 settings，
+    # 需要其它 app 的模型都已加载完毕
+    'sysmanage',
 ]
 
 MIDDLEWARE = [
