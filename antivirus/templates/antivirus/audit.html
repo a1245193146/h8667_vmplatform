@@ -1,0 +1,81 @@
+{% extends "resize/base.html" %}
+
+{% block title %}病毒模块审计日志 - 信息系统运维平台{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+<div class="vmp-page-head">
+    <div>
+        <h1>病毒模块审计日志</h1>
+        <p class="vmp-sub">
+            留存 / 复核 / 恢复 / 清理 / 采集 全部留痕，失败的记录会把原因写在「详情」列，不会被吞掉。
+            命令级的原始输出见 <a href="{% url 'sys_execlogs' %}?module=antivirus">执行留痕</a>。
+        </p>
+    </div>
+</div>
+
+<form method="get" class="vmp-filterbar">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label">关键字</label>
+            <input type="text" name="q" value="{{ f_q }}" class="form-control" placeholder="操作人 / 对象">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">动作</label>
+            <select name="action" class="form-select">
+                <option value="">全部</option>
+                {% for a in actions %}
+                <option value="{{ a }}" {% if f_action == a %}selected{% endif %}>{{ a }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <button type="submit" class="btn btn-primary">筛选</button>
+            <a href="{% url 'av_audit' %}" class="btn btn-outline-secondary">重置</a>
+        </div>
+    </div>
+</form>
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle vmp-table">
+            <thead>
+                <tr><th>时间</th><th>操作人</th><th>动作</th><th>对象</th><th>状态变化</th><th>原因</th><th>结果</th><th>任务号</th><th>详情</th></tr>
+            </thead>
+            <tbody>
+            {% for log in page_obj %}
+                <tr>
+                    <td class="small text-nowrap">{{ log.created_at|date:'Y-m-d H:i:s' }}</td>
+                    <td class="small">{{ log.username }}</td>
+                    <td class="small">{{ log.action }}</td>
+                    <td class="small">
+                        {% if log.detection_id %}
+                        <a href="{% url 'av_detection_detail' log.detection_id %}">{{ log.object_repr }}</a>
+                        {% else %}{{ log.object_repr|default:'-' }}{% endif %}
+                    </td>
+                    <td class="small">
+                        {% if log.old_status or log.new_status %}{{ log.old_status|default:'-' }} → {{ log.new_status|default:'-' }}{% else %}-{% endif %}
+                    </td>
+                    <td class="small" style="max-width:240px;">{{ log.reason|default:'-' }}</td>
+                    <td>
+                        {% if log.result == 'success' %}<span class="vmp-tag vmp-tag-ok">成功</span>
+                        {% else %}<span class="vmp-tag vmp-tag-bad">{{ log.result }}</span>{% endif %}
+                    </td>
+                    <td class="small text-muted">{{ log.ansible_task_ref|default:'-' }}</td>
+                    <td class="small text-muted" style="max-width:260px; word-break:break-all;">{{ log.detail|default:'-'|truncatechars:80 }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="9" class="empty-state">暂无审计日志</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+
+{% include "resize/partials/_pagination.html" with page=page_obj %}
+
+</div>
+{% endblock %}

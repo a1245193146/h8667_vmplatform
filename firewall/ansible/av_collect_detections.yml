@@ -1,0 +1,56 @@
+---
+# av_collect_detections.yml — 读取目标 Windows 主机 Defender 检测事件 (1116/1117/1118/1119)
+# 对应脚本: firewall/powershell/Av-CollectDetections.ps1
+# 用法: ansible-playbook firewall/ansible/av_collect_detections.yml -e target_host=x.x.x.x -e since_record_id=0 -e max_events=300
+# 输出: ps1 的单行 JSON 原样打印到 stdout（含 timings/hash_stats/counts 供诊断超时）
+# 断点续采: since_record_id 为上次已消费的最大 RecordId，仅取 RecordId > since_record_id 的事件
+#           max_events 限制单批处理条数(默认 300)，保证单批能在超时内跑完、水位持续推进、积压分批排空
+# 哈希预算: Get-FileHash 整文件读盘，大容器单个就可能数分钟(历史超时主因)。
+#           max_hash_files(默认50)/max_hash_bytes(默认100MB)/max_hash_total_bytes(默认300MB)
+#           三重上限；超限文件跳过哈希但仍记录检出(file_size+hash_skipped)，绝不丢事件。
+# 作者: AUTO-GENERATED (antivirus automation module)
+
+- name: Collect Windows Defender detections
+  hosts: "{{ target_host }}"
+  gather_facts: false
+  vars:
+    # PowerShell 脚本目录：默认 <playbook目录>/../powershell，可用 -e ps_dir= 覆盖。
+    # 注意不能命名为 ps_dir 再引用自身（Ansible 惰性模板会递归），故用 ps_dir_resolved。
+    ps_dir_resolved: "{{ ps_dir | default(playbook_dir ~ '/../powershell', true) }}"
+  tasks:
+    - name: Check Av-CollectDetections.ps1 exists on Ansible controller
+      stat:
+        path: "{{ ps_dir_resolved }}/Av-CollectDetections.ps1"
+      delegate_to: localhost
+      become: false
+      register: ps_stat_av_collect
+
+    - name: Fail clearly when Av-CollectDetections.ps1 missing
+      fail:
+        msg: "Ansible 控制器上找不到脚本 {{ ps_dir_resolved }}/Av-CollectDetections.ps1 ，请把仓库 firewall/powershell/ 目录放到该位置，或用 -e ps_dir= 指定脚本目录"
+      when: not ps_stat_av_collect.stat.exists
+
+    - name: Ensure AUTO-ITOPS temp dir exists on target
+      win_file:
+        path: C:\Windows\Temp\AUTO-ITOPS
+        state: directory
+
+    - name: Copy Av-CollectDetections.ps1 to target
+      win_copy:
+        src: "{{ ps_dir_resolved }}/Av-CollectDetections.ps1"
+        dest: C:\Windows\Temp\AUTO-ITOPS\Av-CollectDetections.ps1
+
+    - name: Run Av-CollectDetections.ps1
+      win_shell: >-
+        powershell -NoProfile -ExecutionPolicy Bypass
+        -File C:\Windows\Temp\AUTO-ITOPS\Av-CollectDetections.ps1
+        -SinceRecordId {{ since_record_id | default(0) | int }}
+        -MaxEvents {{ max_events | default(300) | int }}
+        -MaxHashFiles {{ max_hash_files | default(50) | int }}
+        -MaxHashBytes {{ max_hash_bytes | default(104857600) | int }}
+        -MaxHashTotalBytes {{ max_hash_total_bytes | default(314572800) | int }}
+      register: result
+
+    - name: Print JSON result
+      debug:
+        var: result.stdout

@@ -1,0 +1,81 @@
+{% extends "resize/base.html" %}
+
+{% block title %}病毒模块 Ansible 任务 - 信息系统运维平台{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+<div class="vmp-page-head">
+    <div>
+        <h1>病毒模块 Ansible 任务</h1>
+        <p class="vmp-sub">playbook 以 av_ 开头（采集 / 留存 / 恢复 / 清理）</p>
+    </div>
+</div>
+
+<form method="get" class="vmp-filterbar">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label">状态</label>
+            <select name="status" class="form-select">
+                <option value="">全部</option>
+                {% for val, label in status_choices %}
+                <option value="{{ val }}" {% if f_status == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <button type="submit" class="btn btn-primary">筛选</button>
+            <a href="{% url 'av_tasks' %}" class="btn btn-outline-secondary">重置</a>
+        </div>
+    </div>
+</form>
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle vmp-table">
+            <thead>
+                <tr><th>任务号</th><th>名称</th><th>Playbook</th><th>目标主机</th><th>状态</th><th>发起人</th><th>创建时间</th><th>完成时间</th><th>输出</th></tr>
+            </thead>
+            <tbody>
+            {% for t in page_obj %}
+                <tr>
+                    <td class="small"><span class="vmp-code">{{ t.task_ref|slice:":12" }}</span></td>
+                    <td class="small">{{ t.name }}</td>
+                    <td class="small"><span class="vmp-code">{{ t.playbook }}</span></td>
+                    <td class="small">{{ t.target_hosts|default:'-' }}</td>
+                    <td>
+                        {% if t.status == 'success' %}<span class="vmp-tag vmp-tag-ok">成功</span>
+                        {% elif t.status == 'failed' %}<span class="vmp-tag vmp-tag-bad">失败</span>
+                        {% elif t.status == 'running' %}<span class="vmp-tag vmp-tag-accent">执行中</span>
+                        {% elif t.status == 'timeout' %}<span class="vmp-tag vmp-tag-warn">超时</span>
+                        {% else %}<span class="vmp-tag vmp-tag-mute">待执行</span>{% endif %}
+                    </td>
+                    <td class="small">{{ t.initiated_by|default:'system' }}</td>
+                    <td class="small text-nowrap">{{ t.created_at|date:'Y-m-d H:i:s' }}</td>
+                    <td class="small text-nowrap">{{ t.finished_at|date:'Y-m-d H:i:s'|default:'-' }}</td>
+                    <td class="small">
+                        {% if t.output %}
+                        <button class="btn btn-sm btn-outline-secondary" type="button"
+                                data-bs-toggle="collapse" data-bs-target="#out-{{ t.task_ref }}">查看</button>
+                        {% else %}-{% endif %}
+                    </td>
+                </tr>
+                {% if t.output %}
+                <tr class="collapse" id="out-{{ t.task_ref }}">
+                    <td colspan="9"><pre class="vmp-code-block" style="max-height:260px;">{{ t.output }}</pre></td>
+                </tr>
+                {% endif %}
+            {% empty %}
+                <tr><td colspan="9" class="empty-state">暂无任务记录</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+
+{% include "resize/partials/_pagination.html" with page=page_obj %}
+
+</div>
+{% endblock %}

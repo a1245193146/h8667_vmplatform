@@ -1,0 +1,122 @@
+{% extends "resize/base.html" %}
+
+{% block title %}病毒检测事件 - 信息系统运维平台{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+<div class="vmp-page-head">
+    <div>
+        <h1>病毒检测事件</h1>
+        <p class="vmp-sub">各主机 Defender 事件日志采集到的病毒检测记录，可按状态、隔离留存与日期筛选；列表为空不等于主机干净，也可能是尚未采集或采集失败。</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="{% url 'av_dashboard' %}" class="btn btn-outline-secondary btn-sm">看板</a>
+        <a href="{% url 'av_audit' %}" class="btn btn-outline-secondary btn-sm">审计日志</a>
+        <form method="post" action="{% url 'av_collect_all' %}" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{% url 'av_detections' %}">
+            <button type="submit" class="btn btn-primary btn-sm"
+                    onclick="return confirm('确定触发全部主机的 Defender 事件采集吗？');">立即采集</button>
+        </form>
+    </div>
+</div>
+
+<form method="get" class="vmp-filterbar">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label">关键字</label>
+            <input type="text" name="q" value="{{ f_q }}" class="form-control"
+                   placeholder="文件名 / 路径 / 威胁名 / SHA256 / 主机">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">当前状态</label>
+            <select name="status" class="form-select">
+                <option value="">全部</option>
+                {% for val, label in status_choices %}
+                <option value="{{ val }}" {% if f_status == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">隔离留存</label>
+            <select name="quarantine_status" class="form-select">
+                <option value="">全部</option>
+                {% for val, label in quarantine_choices %}
+                <option value="{{ val }}" {% if f_qstatus == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">起始日期</label>
+            <input type="date" name="date_from" value="{{ f_date_from }}" class="form-control">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">截止日期</label>
+            <input type="date" name="date_to" value="{{ f_date_to }}" class="form-control">
+        </div>
+        <div class="col-md-1 d-flex gap-1">
+            <button type="submit" class="btn btn-primary">筛选</button>
+            <a href="{% url 'av_detections' %}" class="btn btn-outline-secondary">重置</a>
+        </div>
+    </div>
+</form>
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle vmp-table">
+            <thead>
+                <tr>
+                    <th>检测时间</th><th>服务器</th><th>文件路径</th><th>威胁名称</th>
+                    <th>处置结果</th><th>当前状态</th><th>隔离留存</th><th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for d in page_obj %}
+                <tr>
+                    <td class="small text-nowrap">{{ d.detected_at|date:'Y-m-d H:i' }}</td>
+                    <td class="small">
+                        {{ d.host.hostname }}<br>
+                        <span class="text-muted">{{ d.host.ip }}</span>
+                    </td>
+                    <td class="small" style="max-width:280px;word-break:break-all;">
+                        {{ d.original_path|default:'-' }}<br>
+                        <span class="text-muted">{{ d.file_name }}</span>
+                    </td>
+                    <td class="small">{{ d.threat_name|default:'-' }}</td>
+                    <td class="small">{{ d.action_taken_display|default:'-' }}</td>
+                    <td>
+                        {% if d.status == 'pending_review' %}<span class="vmp-tag vmp-tag-warn">待复核</span>
+                        {% elif d.status == 'confirmed_malicious' %}<span class="vmp-tag vmp-tag-bad">确认恶意</span>
+                        {% elif d.status == 'false_positive' %}<span class="vmp-tag vmp-tag-ok">误报</span>
+                        {% elif d.status == 'restored' %}<span class="vmp-tag vmp-tag-info">已恢复</span>
+                        {% elif d.status == 'cleaned' %}<span class="vmp-tag vmp-tag-mute">已清理</span>
+                        {% else %}<span class="vmp-tag vmp-tag-mute">{{ d.status }}</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if d.quarantine_status == 'preserved' %}<span class="vmp-tag vmp-tag-ok">已留存</span>
+                        {% elif d.quarantine_status == 'pending' %}<span class="vmp-tag vmp-tag-warn">未留存</span>
+                        {% elif d.quarantine_status == 'unavailable' %}<span class="vmp-tag vmp-tag-mute">原文件不可得</span>
+                        {% elif d.quarantine_status == 'restored' %}<span class="vmp-tag vmp-tag-info">已恢复</span>
+                        {% elif d.quarantine_status == 'cleaned' %}<span class="vmp-tag vmp-tag-mute">已清理</span>
+                        {% else %}<span class="vmp-tag vmp-tag-mute">{{ d.quarantine_status }}</span>{% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'av_detection_detail' d.id %}"
+                           class="btn btn-sm btn-outline-primary">详情</a>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="8" class="empty-state">暂无病毒检测事件，可点击右上角"立即采集"从 Defender 事件日志导入</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+
+{% include "resize/partials/_pagination.html" with page=page_obj %}
+
+</div>
+{% endblock %}

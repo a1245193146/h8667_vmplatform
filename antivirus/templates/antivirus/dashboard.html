@@ -1,0 +1,222 @@
+{% extends "resize/base.html" %}
+{% load static %}
+
+{% block title %}病毒检测与隔离看板 - 信息系统运维平台{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 vmp-fade-in">
+
+<div class="vmp-page-head">
+    <div>
+        <h1>病毒检测与隔离看板</h1>
+        <p class="vmp-sub">数据来自周期采集 Defender 事件，每 60 秒自动刷新</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <form method="post" action="{% url 'av_collect_all' %}" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="/antivirus/">
+            <button type="submit" class="btn btn-primary btn-sm"
+                    onclick="return confirm('确定触发全部主机的 Defender 事件采集吗？');">立即采集</button>
+        </form>
+    </div>
+</div>
+
+{{ data|json_script:"av-dashboard-data" }}
+
+<!-- KPI -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg">
+        <div class="vmp-stat h-100">
+            <div class="vmp-stat-num" id="kpi-total">{{ data.status.total }}</div>
+            <div class="vmp-stat-label">检测总数</div>
+            <div class="small mt-2 text-muted">
+                已恢复 <span id="kpi-restored">{{ data.status.restored }}</span> ·
+                已清理 <span id="kpi-cleaned">{{ data.status.cleaned }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="vmp-stat h-100 is-warn">
+            <div class="vmp-stat-num" id="kpi-pending">{{ data.status.pending_review }}</div>
+            <div class="vmp-stat-label">待复核</div>
+            <div class="small mt-2 text-muted">需要人工确认处置</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="vmp-stat h-100 is-bad">
+            <div class="vmp-stat-num" id="kpi-malicious">{{ data.status.confirmed_malicious }}</div>
+            <div class="vmp-stat-label">确认恶意</div>
+            <div class="small mt-2 text-muted">已复核判定为恶意</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="vmp-stat h-100 is-ok">
+            <div class="vmp-stat-num" id="kpi-fp">{{ data.status.false_positive }}</div>
+            <div class="vmp-stat-label">误报</div>
+            <div class="small mt-2 text-muted">复核判定为误报</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="vmp-stat h-100">
+            <div class="vmp-stat-num" id="kpi-preserved">{{ data.quarantine.preserved }}</div>
+            <div class="vmp-stat-label">隔离留存</div>
+            <div class="small mt-2 text-muted">
+                未留存 <span id="kpi-q-pending">{{ data.quarantine.pending }}</span> ·
+                原文件不可得 <span id="kpi-q-unavail">{{ data.quarantine.unavailable }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="vmp-stat h-100">
+            <div class="vmp-stat-num" id="kpi-tracked">{{ data.collect.tracked }}</div>
+            <div class="vmp-stat-label">采集健康度</div>
+            <div class="small mt-2 text-muted">
+                正常 <span id="kpi-collect-ok">{{ data.collect.ok }}</span> ·
+                失败 <span id="kpi-collect-failed">{{ data.collect.failed }}</span> ·
+                过期 <span id="kpi-collect-stale">{{ data.collect.stale }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 趋势 -->
+<div class="card mb-4">
+    <div class="vmp-card-head"><h2>近 14 天检测趋势</h2></div>
+    <div class="card-body"><div id="trend-chart" style="width:100%;height:300px;"></div></div>
+</div>
+
+<!-- 分布图 -->
+<div class="row">
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="vmp-card-head"><h2>按服务器分布（TOP）</h2></div>
+            <div class="card-body"><div id="host-chart" style="width:100%;height:320px;"></div></div>
+        </div>
+    </div>
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="vmp-card-head"><h2>按威胁类型分布</h2></div>
+            <div class="card-body"><div id="type-chart" style="width:100%;height:320px;"></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- 威胁名称 TOP 表 -->
+<div class="card mb-4">
+    <div class="vmp-card-head"><h2>TOP Defender 威胁名称</h2></div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0 vmp-table">
+            <thead><tr><th>威胁名称</th><th class="text-end">检出次数</th></tr></thead>
+            <tbody id="top-threats">
+            {% for name, n in data.by_threat_name %}
+                <tr><td>{{ name }}</td><td class="text-end">{{ n }}</td></tr>
+            {% empty %}
+                <tr><td colspan="2" class="empty-state py-3">暂无数据</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'firewall/js/echarts.min.js' %}"></script>
+<script>
+(function () {
+    var data = JSON.parse(document.getElementById('av-dashboard-data').textContent);
+    var trendChart = echarts.init(document.getElementById('trend-chart'));
+    var hostChart = echarts.init(document.getElementById('host-chart'));
+    var typeChart = echarts.init(document.getElementById('type-chart'));
+
+    function renderTrend(d) {
+        trendChart.setOption({
+            color: ['#c0504d'],
+            tooltip: { trigger: 'axis' },
+            grid: { left: 50, right: 20, top: 30, bottom: 40 },
+            xAxis: { type: 'category', data: d.trend.map(function (p) { return p.day; }) },
+            yAxis: { type: 'value', minInterval: 1 },
+            series: [{
+                name: '检出', type: 'line', smooth: true,
+                areaStyle: { opacity: 0.12 },
+                data: d.trend.map(function (p) { return p.count; })
+            }]
+        });
+    }
+
+    function renderHost(d) {
+        var rows = d.by_host.slice().reverse();
+        hostChart.setOption({
+            color: ['#4e7a72'],
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+            grid: { left: 160, right: 30, top: 20, bottom: 30 },
+            xAxis: { type: 'value', minInterval: 1 },
+            yAxis: { type: 'category', data: rows.map(function (r) { return r[0]; }) },
+            series: [{ type: 'bar', data: rows.map(function (r) { return r[1]; }) }]
+        });
+    }
+
+    function renderType(d) {
+        typeChart.setOption({
+            color: ['#c0504d', '#d9a441', '#5c7a4e', '#4e7a72', '#7a5c8a', '#8a7a4e', '#4e6a8a', '#a15c6a'],
+            tooltip: { trigger: 'item' },
+            legend: { type: 'scroll', bottom: 0 },
+            series: [{
+                type: 'pie', radius: ['40%', '68%'], center: ['50%', '45%'],
+                data: d.by_threat_type.map(function (r) { return { name: r[0], value: r[1] }; }),
+                label: { formatter: '{b}: {c}' }
+            }]
+        });
+    }
+
+    function setText(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
+
+    function renderTopThreats(rows) {
+        var tbody = document.getElementById('top-threats');
+        if (!tbody) return;
+        if (!rows || !rows.length) {
+            tbody.innerHTML = '<tr><td colspan="2" class="empty-state py-3">暂无数据</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(function (r) {
+            return '<tr><td>' + String(r[0]).replace(/[<>&]/g, '') +
+                   '</td><td class="text-end">' + r[1] + '</td></tr>';
+        }).join('');
+    }
+
+    function renderKpi(d) {
+        setText('kpi-total', d.status.total);
+        setText('kpi-pending', d.status.pending_review);
+        setText('kpi-malicious', d.status.confirmed_malicious);
+        setText('kpi-fp', d.status.false_positive);
+        setText('kpi-restored', d.status.restored);
+        setText('kpi-cleaned', d.status.cleaned);
+        setText('kpi-preserved', d.quarantine.preserved);
+        setText('kpi-q-pending', d.quarantine.pending);
+        setText('kpi-q-unavail', d.quarantine.unavailable);
+        setText('kpi-tracked', d.collect.tracked);
+        setText('kpi-collect-ok', d.collect.ok);
+        setText('kpi-collect-failed', d.collect.failed);
+        setText('kpi-collect-stale', d.collect.stale);
+        renderTopThreats(d.by_threat_name);
+    }
+
+    function renderAll(d) { renderTrend(d); renderHost(d); renderType(d); renderKpi(d); }
+
+    renderAll(data);
+    window.addEventListener('resize', function () {
+        trendChart.resize(); hostChart.resize(); typeChart.resize();
+    });
+
+    setInterval(function () {
+        fetch('{% url "av_api_dashboard" %}', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { renderAll(d); })
+            .catch(function (e) { console.error('av dashboard refresh failed', e); });
+    }, 60000);
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,58 @@
+---
+# av_restore_file.yml — 从 UNC 隔离副本恢复文件到原始路径（误报恢复）
+# 对应脚本: firewall/powershell/Av-RestoreFile.ps1
+# 用法: ansible-playbook firewall/ansible/av_restore_file.yml -e target_host=x.x.x.x \
+#         -e source_path='\\fs\AV-Quarantine\2026\09\22\1\a.exe' -e dest_path='C:\data\a.exe'
+# 安全: 路径通过 win_copy 写入 ParamsFile(JSON)，不经命令行拼接，杜绝注入/空格截断
+# 输出: ps1 的单行 JSON 原样打印到 stdout
+# 作者: AUTO-GENERATED (antivirus automation module)
+
+- name: Restore preserved file to original path
+  hosts: "{{ target_host }}"
+  gather_facts: false
+  vars:
+    ps_dir_resolved: "{{ ps_dir | default(playbook_dir ~ '/../powershell', true) }}"
+    params_file: C:\Windows\Temp\AUTO-ITOPS\av_restore_params.json
+  tasks:
+    - name: Check Av-RestoreFile.ps1 exists on Ansible controller
+      stat:
+        path: "{{ ps_dir_resolved }}/Av-RestoreFile.ps1"
+      delegate_to: localhost
+      become: false
+      register: ps_stat_av_restore
+
+    - name: Fail clearly when Av-RestoreFile.ps1 missing
+      fail:
+        msg: "Ansible 控制器上找不到脚本 {{ ps_dir_resolved }}/Av-RestoreFile.ps1 ，请把仓库 firewall/powershell/ 目录放到该位置，或用 -e ps_dir= 指定脚本目录"
+      when: not ps_stat_av_restore.stat.exists
+
+    - name: Ensure AUTO-ITOPS temp dir exists on target
+      win_file:
+        path: C:\Windows\Temp\AUTO-ITOPS
+        state: directory
+
+    - name: Copy Av-RestoreFile.ps1 to target
+      win_copy:
+        src: "{{ ps_dir_resolved }}/Av-RestoreFile.ps1"
+        dest: C:\Windows\Temp\AUTO-ITOPS\Av-RestoreFile.ps1
+
+    - name: Write params JSON to target (no shell interpolation)
+      win_copy:
+        content: "{{ { 'SourcePath': source_path, 'DestPath': dest_path } | to_json }}"
+        dest: "{{ params_file }}"
+
+    - name: Run Av-RestoreFile.ps1
+      win_shell: >-
+        powershell -NoProfile -ExecutionPolicy Bypass
+        -File C:\Windows\Temp\AUTO-ITOPS\Av-RestoreFile.ps1
+        -ParamsFile {{ params_file }}
+      register: result
+
+    - name: Remove params JSON
+      win_file:
+        path: "{{ params_file }}"
+        state: absent
+
+    - name: Print JSON result
+      debug:
+        var: result.stdout
